@@ -1,10 +1,16 @@
 {
   "expo": {
-    "name": "Health Care Patient",
+    "name": "Home Care Nursing Services",
     "slug": "health-care-patient-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/careslot-logo.png",
+    "splash": {
+      "image": "./assets/careslot-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -13,6 +19,7 @@
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./assets/careslot-logo.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.amitrai.healthcarepatientapp"
