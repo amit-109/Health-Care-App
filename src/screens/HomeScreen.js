@@ -1,12 +1,12 @@
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { AntDesign, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 
-export default function HomeScreen({ user, appointments, prescriptions }) {
+export default function HomeScreen({ user, prescriptions }) {
   const { width } = useWindowDimensions();
   const compact = width < 380;
   const singleColumn = width < 350;
   const firstName = user.name.split(' ')[0];
-  const nextAppointment = appointments[0]?.date || user.nextAppointment;
+  const nextAppointment = user.nextAppointment;
 
   const summaryCards = [
     { id: '1', title: 'Next Appointment', value: nextAppointment, icon: 'calendar', family: 'ant' },

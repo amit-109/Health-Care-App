@@ -15,9 +15,16 @@
       "adaptiveIcon": {
         "backgroundColor": "#ffffff"
       },
-      "minSdkVersion": 24,
-      "targetSdkVersion": 34,
-      "compileSdkVersion": 34
-    }
+      "package": "com.amitrai.healthcarepatientapp"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "7d1a185d-c3e3-422a-81dc-858001432ea4"
+      }
+    },
+    "plugins": [
+      "expo-font",
+      "@react-native-community/datetimepicker"
+    ]
   }
 }

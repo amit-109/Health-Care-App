@@ -13,19 +13,14 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-export default function OtpVerificationScreen({ navigation, authType, contact, otp, onVerifyOtp, onResendOtp }) {
+export default function OtpVerificationScreen({ navigation, authType, contact, onVerifyOtp, onResendOtp }) {
   const { width } = useWindowDimensions();
   const compact = width < 380;
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
-  const info = useMemo(
-    () => `OTP sent to ${contact}. Please enter the code to continue.`,
-    [contact]
-  );
+  const info = useMemo(() => `OTP sent to ${contact}. Please enter the code to continue.`, [contact]);
 
   const handleVerify = async () => {
     setError('');
@@ -35,8 +30,7 @@ export default function OtpVerificationScreen({ navigation, authType, contact, o
     }
 
     setLoading(true);
-    await wait(450);
-    const result = onVerifyOtp(code.trim());
+    const result = await onVerifyOtp(code.trim());
     setLoading(false);
 
     if (!result.ok) {
@@ -45,9 +39,9 @@ export default function OtpVerificationScreen({ navigation, authType, contact, o
   };
 
   const handleResend = async () => {
+    setError('');
     setResending(true);
-    await wait(350);
-    const result = onResendOtp();
+    const result = await onResendOtp();
     setResending(false);
     if (!result.ok) {
       setError(result.error);
@@ -59,7 +53,11 @@ export default function OtpVerificationScreen({ navigation, authType, contact, o
       <ScrollView contentContainerStyle={[styles.scrollContent, compact && styles.scrollContentCompact]} keyboardShouldPersistTaps="handled">
         <View style={[styles.card, compact && styles.cardCompact]}>
           <Text style={[styles.title, compact && styles.titleCompact]}>{authType === 'signup' ? 'Verify registration' : 'Verify login'}</Text>
-          <Text style={styles.subtitle}>We sent a temporary code to your email and phone. Enter it below to continue.</Text>
+          <Text style={styles.subtitle}>
+            {authType === 'signup'
+              ? 'We sent a temporary code to your registered phone number. Enter it below to finish registration.'
+              : 'We sent a temporary code to your phone number. Enter it below to continue.'}
+          </Text>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>One-time password</Text>
@@ -78,7 +76,6 @@ export default function OtpVerificationScreen({ navigation, authType, contact, o
 
           <View style={styles.infoCard}>
             <Text style={styles.infoText}>{info}</Text>
-            <Text style={styles.demoOtp}>Demo OTP: {otp}</Text>
           </View>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -176,12 +173,6 @@ const styles = StyleSheet.create({
     color: '#5f6583',
     fontSize: 13,
     lineHeight: 19
-  },
-  demoOtp: {
-    color: '#4f7cff',
-    fontSize: 13,
-    marginTop: 6,
-    fontWeight: '700'
   },
   verifyButton: {
     marginTop: 16,

@@ -1,3 +1,4 @@
+import 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -5,6 +6,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { AntDesign, Feather, MaterialIcons } from '@expo/vector-icons';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import LoginScreen from './src/screens/LoginScreen';
 import SignupScreen from './src/screens/SignupScreen';
@@ -13,34 +15,51 @@ import HomeScreen from './src/screens/HomeScreen';
 import AppointmentsScreen from './src/screens/AppointmentsScreen';
 import PrescriptionsScreen from './src/screens/PrescriptionsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
-import { defaultUser, appointments, prescriptions } from './src/data/dummyData';
+import { prescriptions } from './src/data/dummyData';
+import {
+  extractAuthToken,
+  extractUser,
+  loginWithPassword,
+  registerUser,
+  sendLoginOtp,
+  verifyLoginOtp,
+  verifySignupOtp
+} from './src/api/auth';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-const createUserProfile = (user) => ({
-  name: user.fullName || user.name,
-  email: user.email,
-  phone: user.phone,
-  age: user.age || 28,
-  gender: user.gender || 'Not specified',
-  bloodGroup: user.bloodGroup || 'O+',
-  city: user.city || 'Unknown',
-  address: user.address || user.pinCode ? `Pin code ${user.pinCode}` : 'Not available',
-  lastVisit: '2026-04-05',
-  nextAppointment: '2026-04-26',
-  message: 'Your doctor is ready for follow-up and your health summary is updated.'
+const normalizePhone = (value = '') => value.replace(/\D/g, '');
+
+const createUserProfile = (user = {}, fallback = {}) => ({
+  id: user.id || user.userId || user.UserId || fallback.id || fallback.userId || 0,
+  name: user.fullName || user.name || fallback.name || 'Patient',
+  email: user.email || fallback.email || '',
+  phone: user.phone || user.phoneNumber || fallback.phone || fallback.phoneNumber || '',
+  age: user.age || fallback.age || 28,
+  gender: user.gender || fallback.gender || 'Not specified',
+  bloodGroup: user.bloodGroup || fallback.bloodGroup || 'O+',
+  city: user.city || fallback.city || 'Unknown',
+  address: user.address || fallback.address || 'Not available',
+  landmark: user.landmark || fallback.landmark || '',
+  houseNumber: user.houseNumber || fallback.houseNumber || '',
+  role: user.role || fallback.role || 'patient',
+  token: user.token || fallback.token || '',
+  lastVisit: user.lastVisit || fallback.lastVisit || '2026-04-05',
+  nextAppointment: user.nextAppointment || fallback.nextAppointment || '2026-04-26',
+  message:
+    user.message ||
+    fallback.message ||
+    'Your doctor is ready for follow-up and your health summary is updated.'
 });
 
-const normalizePhone = (value) => value.replace(/\D/g, '');
+const getErrorMessage = (error, fallback) => error?.message || fallback;
 
 function AppContent() {
   const insets = useSafeAreaInsets();
   const toastTimerRef = useRef(null);
   const [user, setUser] = useState(null);
-  const [registeredUsers, setRegisteredUsers] = useState([defaultUser]);
   const [pendingAuth, setPendingAuth] = useState(null);
-  const [pendingOtp, setPendingOtp] = useState('');
   const [toast, setToast] = useState(null);
   const [theme] = useState({ primary: '#4f7cff', background: '#f5f7ff' });
 
@@ -56,132 +75,180 @@ function AppContent() {
     }, 2400);
   };
 
-  const screenOptions = useMemo(() => ({
-    headerShown: false,
-    tabBarActiveTintColor: theme.primary,
-    tabBarInactiveTintColor: '#7a7a7a',
-    tabBarStyle: [
-      styles.tabBar,
-      {
-        height: 58 + Math.max(insets.bottom, 8),
-        paddingBottom: Math.max(insets.bottom, 8),
-        paddingTop: 6
+  const screenOptions = useMemo(
+    () => ({
+      headerShown: false,
+      tabBarActiveTintColor: theme.primary,
+      tabBarInactiveTintColor: '#7a7a7a',
+      tabBarStyle: [
+        styles.tabBar,
+        {
+          height: 58 + Math.max(insets.bottom, 8),
+          paddingBottom: Math.max(insets.bottom, 8),
+          paddingTop: 6
+        }
+      ],
+      tabBarItemStyle: styles.tabBarItem,
+      tabBarLabelStyle: styles.tabBarLabel
+    }),
+    [insets.bottom, theme.primary]
+  );
+
+  const handlePasswordLogin = async (identifier, password) => {
+    try {
+      const payload = await loginWithPassword({
+        emailOrPhone: identifier.trim(),
+        password
+      });
+      const apiUser = extractUser(payload) || {};
+      const token = extractAuthToken(payload);
+      const resolvedUser = createUserProfile(
+        {
+          ...apiUser,
+          token
+        },
+        {
+          email: identifier.includes('@') ? identifier.trim().toLowerCase() : '',
+          phone: identifier.includes('@') ? '' : normalizePhone(identifier)
+        }
+      );
+
+      setUser(resolvedUser);
+      showToast(`Welcome back, ${resolvedUser.name.split(' ')[0]}.`, 'success');
+      return { ok: true };
+    } catch (error) {
+      const message = getErrorMessage(error, 'Unable to sign in. Please try again.');
+      showToast(message, 'error');
+      return { ok: false, error: message };
+    }
+  };
+
+  const handleSendOtpLogin = async (identifier) => {
+    const phoneNumber = normalizePhone(identifier.trim());
+
+    if (phoneNumber.length < 10) {
+      const message = 'Please enter a valid phone number for OTP login.';
+      showToast(message, 'error');
+      return { ok: false, error: message };
+    }
+
+    try {
+      await sendLoginOtp({ phoneNumber });
+      setPendingAuth({
+        type: 'login-otp',
+        phoneNumber,
+        contact: phoneNumber
+      });
+      showToast('OTP sent successfully.', 'success');
+      return { ok: true, contact: phoneNumber };
+    } catch (error) {
+      const message = getErrorMessage(error, 'Unable to send OTP. Please try again.');
+      showToast(message, 'error');
+      return { ok: false, error: message };
+    }
+  };
+
+  const handleRegister = async (registrationData) => {
+    try {
+      await registerUser(registrationData);
+      setPendingAuth({
+        type: 'signup',
+        user: registrationData,
+        phoneNumber: normalizePhone(registrationData.phoneNumber),
+        contact: registrationData.phoneNumber
+      });
+      showToast('Registration OTP sent.', 'success');
+      return { ok: true, contact: registrationData.phoneNumber };
+    } catch (error) {
+      const message = getErrorMessage(error, 'Unable to register. Please try again.');
+      showToast(message, 'error');
+      return { ok: false, error: message };
+    }
+  };
+
+  const handleVerifyOtp = async (inputOtp) => {
+    if (!pendingAuth) {
+      showToast('No OTP request is active.', 'error');
+      return { ok: false, error: 'No OTP request is active. Please start again.' };
+    }
+
+    try {
+      if (pendingAuth.type === 'signup') {
+        const payload = await verifySignupOtp({
+          phoneNumber: pendingAuth.phoneNumber,
+          otp: inputOtp
+        });
+        const apiUser = extractUser(payload) || {};
+        const token = extractAuthToken(payload);
+        const resolvedUser = createUserProfile(
+          {
+            ...apiUser,
+            token
+          },
+          pendingAuth.user
+        );
+
+        setUser(resolvedUser);
+        showToast('Account created successfully.', 'success');
+      } else {
+        const payload = await verifyLoginOtp({
+          phoneNumber: pendingAuth.phoneNumber,
+          otp: inputOtp
+        });
+        const apiUser = extractUser(payload) || {};
+        const token = extractAuthToken(payload);
+        const resolvedUser = createUserProfile(
+          {
+            ...apiUser,
+            token
+          },
+          {
+            phone: pendingAuth.phoneNumber
+          }
+        );
+
+        setUser(resolvedUser);
+        showToast('OTP verified successfully.', 'success');
       }
-    ],
-    tabBarItemStyle: styles.tabBarItem,
-    tabBarLabelStyle: styles.tabBarLabel
-  }), [insets.bottom, theme.primary]);
 
-  const findUser = (identifier) =>
-    registeredUsers.find(
-      (item) =>
-        item.email.toLowerCase() === identifier.toLowerCase() ||
-        normalizePhone(item.phone) === normalizePhone(identifier)
-    );
-
-  const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
-
-  const handlePasswordLogin = (identifier, password) => {
-    const existingUser = findUser(identifier.trim());
-    if (!existingUser) {
-      showToast('No user found with this email or phone.', 'error');
-      return { ok: false, error: 'No user found with this email or phone.' };
+      setPendingAuth(null);
+      return { ok: true };
+    } catch (error) {
+      const message = getErrorMessage(error, 'Invalid or expired OTP. Please try again.');
+      showToast(message, 'error');
+      return { ok: false, error: message };
     }
-    if (existingUser.password !== password) {
-      showToast('Incorrect password. Please try again.', 'error');
-      return { ok: false, error: 'Incorrect password. Please try again.' };
-    }
-    setUser(createUserProfile(existingUser));
-    showToast(`Welcome back, ${existingUser.name.split(' ')[0]}.`, 'success');
-    return { ok: true };
   };
 
-  const handleSendOtpLogin = (identifier) => {
-    const trimmedIdentifier = identifier.trim();
-    const phoneDigits = normalizePhone(trimmedIdentifier);
-    const existingUser = findUser(trimmedIdentifier);
-
-    if (!existingUser && phoneDigits.length !== 10) {
-      showToast('No user found with this email or phone.', 'error');
-      return { ok: false, error: 'No user found with this email or phone.' };
-    }
-
-    const otpUser =
-      existingUser ||
-      {
-        ...defaultUser,
-        name: 'Demo Patient',
-        fullName: 'Demo Patient',
-        phone: phoneDigits,
-        email: `demo${phoneDigits}@patient.local`
-      };
-
-    const otp = generateOtp();
-    setPendingAuth({ type: 'login-otp', user: otpUser, contact: otpUser.phone });
-    setPendingOtp(otp);
-    showToast('OTP sent successfully.', 'success');
-    return { ok: true, otp, contact: otpUser.phone };
-  };
-
-  const handleRegister = (registrationData) => {
-    const existingEmail = registeredUsers.some((item) => item.email.toLowerCase() === registrationData.email.toLowerCase());
-    const existingPhone = registeredUsers.some((item) => item.phone === registrationData.phone);
-    if (existingEmail || existingPhone) {
-      showToast('User already exists with this email or phone.', 'error');
-      return { ok: false, error: 'A user already exists with this email or phone number.' };
-    }
-
-    const otp = generateOtp();
-    setPendingAuth({ type: 'signup', user: registrationData, contact: `${registrationData.email} and ${registrationData.phone}` });
-    setPendingOtp(otp);
-    showToast('Registration OTP sent.', 'success');
-    return { ok: true, otp, contact: `${registrationData.email} and ${registrationData.phone}` };
-  };
-
-  const handleVerifyOtp = (inputOtp) => {
+  const handleResendOtp = async () => {
     if (!pendingAuth) {
       showToast('No OTP request is active.', 'error');
       return { ok: false, error: 'No OTP request is active. Please start again.' };
     }
-    if (inputOtp.trim() !== pendingOtp) {
-      showToast('Invalid or expired OTP.', 'error');
-      return { ok: false, error: 'Invalid or expired OTP. Please try again.' };
-    }
 
-    if (pendingAuth.type === 'signup') {
-      const newUser = {
-        ...pendingAuth.user,
-        name: pendingAuth.user.fullName,
-        address: `Pin code ${pendingAuth.user.pinCode}`
-      };
-      setRegisteredUsers((prev) => [...prev, newUser]);
-      setUser(createUserProfile(newUser));
-      showToast('Account created successfully.', 'success');
-    } else {
-      setUser(createUserProfile(pendingAuth.user));
-      showToast('OTP verified successfully.', 'success');
-    }
+    try {
+      if (pendingAuth.type === 'login-otp') {
+        await sendLoginOtp({ phoneNumber: pendingAuth.phoneNumber });
+      } else {
+        await registerUser(pendingAuth.user);
+      }
 
-    setPendingAuth(null);
-    setPendingOtp('');
-    return { ok: true };
+      showToast('OTP resent successfully.', 'success');
+      return { ok: true };
+    } catch (error) {
+      const message = getErrorMessage(error, 'Unable to resend OTP. Please try again.');
+      showToast(message, 'error');
+      return { ok: false, error: message };
+    }
   };
 
-  const handleResendOtp = () => {
-    if (!pendingAuth) {
-      showToast('No OTP request is active.', 'error');
-      return { ok: false, error: 'No OTP request is active. Please start again.' };
-    }
-    const otp = generateOtp();
-    setPendingOtp(otp);
-    showToast('OTP resent successfully.', 'success');
-    return { ok: true, otp };
+  const handleAppointmentCreated = () => {
+    showToast('Appointment booked successfully.', 'success');
   };
 
   const handleLogout = () => {
     setUser(null);
     setPendingAuth(null);
-    setPendingOtp('');
     showToast('Logged out successfully.', 'info');
   };
 
@@ -193,13 +260,7 @@ function AppContent() {
         {!user ? (
           <Stack.Navigator screenOptions={{ headerShown: false }}>
             <Stack.Screen name="Login">
-              {(props) => (
-                <LoginScreen
-                  {...props}
-                  onPasswordLogin={handlePasswordLogin}
-                  onOtpLogin={handleSendOtpLogin}
-                />
-              )}
+              {(props) => <LoginScreen {...props} onPasswordLogin={handlePasswordLogin} onOtpLogin={handleSendOtpLogin} />}
             </Stack.Screen>
             <Stack.Screen name="Signup">
               {(props) => <SignupScreen {...props} onRegister={handleRegister} />}
@@ -210,7 +271,6 @@ function AppContent() {
                   {...props}
                   authType={pendingAuth?.type}
                   contact={pendingAuth?.contact}
-                  otp={pendingOtp}
                   onVerifyOtp={handleVerifyOtp}
                   onResendOtp={handleResendOtp}
                 />
@@ -221,14 +281,14 @@ function AppContent() {
           <Tab.Navigator screenOptions={screenOptions}>
             <Tab.Screen
               name="Home"
-              children={() => <HomeScreen user={user} appointments={appointments} prescriptions={prescriptions} />}
+              children={() => <HomeScreen user={user} prescriptions={prescriptions} />}
               options={{
                 tabBarIcon: ({ color }) => <AntDesign name="home" size={20} color={color} />
               }}
             />
             <Tab.Screen
               name="Appointments"
-              children={() => <AppointmentsScreen appointments={appointments} />}
+              children={() => <AppointmentsScreen user={user} onAppointmentCreated={handleAppointmentCreated} />}
               options={{
                 tabBarIcon: ({ color }) => <MaterialIcons name="event-note" size={20} color={color} />
               }}
@@ -271,9 +331,11 @@ function AppContent() {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <AppContent />
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.container}>
+      <SafeAreaProvider>
+        <AppContent />
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 

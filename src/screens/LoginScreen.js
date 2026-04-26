@@ -13,8 +13,6 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 export default function LoginScreen({ navigation, onPasswordLogin, onOtpLogin }) {
   const { width } = useWindowDimensions();
   const compact = width < 380;
@@ -33,7 +31,6 @@ export default function LoginScreen({ navigation, onPasswordLogin, onOtpLogin })
     }
 
     setLoading(true);
-    await wait(450);
 
     if (mode === 'password') {
       if (!password) {
@@ -41,17 +38,19 @@ export default function LoginScreen({ navigation, onPasswordLogin, onOtpLogin })
         setError('Please enter your password.');
         return;
       }
-      const result = onPasswordLogin(identifier.trim(), password);
+
+      const result = await onPasswordLogin(identifier.trim(), password);
       if (!result.ok) {
         setError(result.error);
       }
     } else {
-      const result = onOtpLogin(identifier.trim());
+      const result = await onOtpLogin(identifier.trim());
       if (!result.ok) {
         setLoading(false);
         setError(result.error);
         return;
       }
+
       navigation.navigate('OtpVerification', {
         authType: 'login-otp',
         contact: result.contact
@@ -66,9 +65,7 @@ export default function LoginScreen({ navigation, onPasswordLogin, onOtpLogin })
       <ScrollView contentContainerStyle={[styles.scrollContent, compact && styles.scrollContentCompact]} keyboardShouldPersistTaps="handled">
         <View style={[styles.card, compact && styles.cardCompact]}>
           <Text style={[styles.title, compact && styles.titleCompact]}>Patient Sign In</Text>
-          <Text style={[styles.subtitle, compact && styles.subtitleCompact]}>
-            Login with password or receive OTP on email and phone.
-          </Text>
+          <Text style={[styles.subtitle, compact && styles.subtitleCompact]}>Login with password or receive OTP on your phone.</Text>
 
           <View style={styles.modeRow}>
             <TouchableOpacity disabled={loading} onPress={() => setMode('password')} style={[styles.modeButton, mode === 'password' && styles.modeActive]}>
@@ -82,13 +79,13 @@ export default function LoginScreen({ navigation, onPasswordLogin, onOtpLogin })
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Email or phone</Text>
             <View style={styles.inputRow}>
-              <MaterialIcons name="email" size={18} color="#66708a" />
+              <MaterialIcons name={mode === 'password' ? 'email' : 'phone'} size={18} color="#66708a" />
               <TextInput
                 style={styles.input}
-                placeholder="patient@demo.com"
+                placeholder={mode === 'password' ? 'patient@demo.com' : '+91 98765 43210'}
                 value={identifier}
                 onChangeText={setIdentifier}
-                keyboardType="email-address"
+                keyboardType={mode === 'password' ? 'email-address' : 'phone-pad'}
                 autoCapitalize="none"
                 editable={!loading}
               />
@@ -120,11 +117,6 @@ export default function LoginScreen({ navigation, onPasswordLogin, onOtpLogin })
           <TouchableOpacity disabled={loading} style={[styles.loginButton, loading && styles.buttonDisabled]} onPress={handleSubmit}>
             {loading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.loginText}>{mode === 'password' ? 'Sign In' : 'Send OTP'}</Text>}
           </TouchableOpacity>
-
-          <View style={styles.helpCard}>
-            <Text style={styles.helpText}>Demo password login</Text>
-            <Text style={styles.helpNote}>patient@demo.com / patient123</Text>
-          </View>
 
           <View style={styles.signupRow}>
             <Text style={styles.signupText}>Need a new account?</Text>
@@ -243,22 +235,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 15,
     fontWeight: '700'
-  },
-  helpCard: {
-    marginTop: 14,
-    backgroundColor: '#f7f9ff',
-    borderRadius: 14,
-    padding: 12
-  },
-  helpText: {
-    color: '#7d86a1',
-    fontSize: 12
-  },
-  helpNote: {
-    color: '#4f7cff',
-    marginTop: 4,
-    fontWeight: '600',
-    fontSize: 13
   },
   signupRow: {
     marginTop: 16,
