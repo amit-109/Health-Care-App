@@ -27,6 +27,17 @@ export async function getServices() {
   });
 }
 
+export async function getAvailableStaff(date, slot) {
+  const params = new URLSearchParams({
+    date,
+    slot
+  });
+
+  return apiRequest(`/api/staff/available?${params.toString()}`, {
+    method: 'GET'
+  });
+}
+
 export async function createPatientAppointment(data) {
   const formData = new FormData();
 
@@ -38,6 +49,8 @@ export async function createPatientAppointment(data) {
   appendFormValue(formData, 'ServiceId', String(data.serviceId ?? 0));
   appendFormValue(formData, 'DischargeDate', formatDateTime(data.dischargeDate));
   appendFormValue(formData, 'DoctorPrescription', data.doctorPrescription);
+  appendFormValue(formData, 'Latitude', data.latitude);
+  appendFormValue(formData, 'Longitude', data.longitude);
   appendFormValue(formData, 'StaffId', String(data.staffId ?? 0));
 
   if (data.diseaseImage?.uri) {
@@ -45,6 +58,14 @@ export async function createPatientAppointment(data) {
       uri: data.diseaseImage.uri,
       name: data.diseaseImage.name || 'disease-image.jpg',
       type: data.diseaseImage.type || 'image/jpeg'
+    });
+  }
+
+  if (data.doctorPrescriptionImage?.uri) {
+    formData.append('DoctorPrescriptionImage', {
+      uri: data.doctorPrescriptionImage.uri,
+      name: data.doctorPrescriptionImage.name || 'doctor-prescription-image.jpg',
+      type: data.doctorPrescriptionImage.type || 'image/jpeg'
     });
   }
 
@@ -96,6 +117,30 @@ export function extractServices(payload) {
 
   if (Array.isArray(payload?.result)) {
     return payload.result;
+  }
+
+  return [];
+}
+
+export function extractAvailableStaff(payload) {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (Array.isArray(payload?.data)) {
+    return payload.data;
+  }
+
+  if (Array.isArray(payload?.result)) {
+    return payload.result;
+  }
+
+  if (Array.isArray(payload?.staff)) {
+    return payload.staff;
+  }
+
+  if (Array.isArray(payload?.staffs)) {
+    return payload.staffs;
   }
 
   return [];

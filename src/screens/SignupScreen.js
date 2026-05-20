@@ -15,6 +15,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 
 const TABS = ['Personal Info', 'Address'];
 const ALLOWED_PIN_CODES = new Set(['110014', '110003', '110048', '110019', '110065', '110017', '110049', '110029', '110024']);
+const GENDER_OPTIONS = ['Male', 'Female', 'Other'];
 
 function Field({ icon, placeholder, value, onChangeText, keyboardType, secureTextEntry, autoCapitalize, editable, right }) {
   return (
@@ -44,6 +45,8 @@ export default function SignupScreen({ navigation, onRegister }) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [gender, setGender] = useState('');
+  const [genderMenuOpen, setGenderMenuOpen] = useState(false);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [address, setAddress] = useState('');
@@ -70,7 +73,7 @@ export default function SignupScreen({ navigation, onRegister }) {
   };
 
   const validateTab0 = () => {
-    if (!fullName.trim() || !email.trim() || !phone.trim() || !pincode.trim() || !password.trim()) {
+    if (!fullName.trim() || !email.trim() || !phone.trim() || !gender || !pincode.trim() || !password.trim()) {
       setError('Please fill all required fields.'); return false;
     }
     if (phone.replace(/\D/g, '').length < 10) {
@@ -95,6 +98,7 @@ export default function SignupScreen({ navigation, onRegister }) {
       name: fullName.trim(),
       email: email.trim(),
       phoneNumber: phone.trim(),
+      gender,
       pinCode: pincode.trim(),
       password,
       address: address.trim(),
@@ -145,6 +149,38 @@ export default function SignupScreen({ navigation, onRegister }) {
               <View style={s.inputGroup}>
                 <Text style={s.label}>Phone *</Text>
                 <Field icon="phone" placeholder="+91 98765 43210" value={phone} onChangeText={setPhone} keyboardType="phone-pad" autoCapitalize="none" editable={!loading} />
+              </View>
+              <View style={s.inputGroup}>
+                <Text style={s.label}>Gender *</Text>
+                <TouchableOpacity
+                  disabled={loading}
+                  style={s.dropdownButton}
+                  onPress={() => setGenderMenuOpen((current) => !current)}
+                >
+                  <MaterialIcons name="person-outline" size={18} color="#66708a" />
+                  <Text style={[s.dropdownText, !gender && s.dropdownPlaceholder]}>
+                    {gender || 'Select gender'}
+                  </Text>
+                  <MaterialIcons name={genderMenuOpen ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} size={20} color="#66708a" />
+                </TouchableOpacity>
+                {genderMenuOpen ? (
+                  <View style={s.dropdownMenu}>
+                    {GENDER_OPTIONS.map((option) => (
+                      <TouchableOpacity
+                        key={option}
+                        disabled={loading}
+                        style={s.dropdownItem}
+                        onPress={() => {
+                          setGender(option);
+                          setGenderMenuOpen(false);
+                          setError('');
+                        }}
+                      >
+                        <Text style={[s.dropdownItemText, gender === option && s.dropdownItemTextActive]}>{option}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : null}
               </View>
               <View style={s.inputGroup}>
                 <Text style={s.label}>Pin Code *</Text>
@@ -256,6 +292,13 @@ const s = StyleSheet.create({
   helperText: { color: '#7d86a1', fontSize: 12, marginTop: 6 },
   inputRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f3f5ff', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 11 },
   input: { marginLeft: 10, fontSize: 15, flex: 1, color: '#1f2540' },
+  dropdownButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f3f5ff', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 11 },
+  dropdownText: { marginLeft: 10, fontSize: 15, flex: 1, color: '#1f2540' },
+  dropdownPlaceholder: { color: '#a0a8c0' },
+  dropdownMenu: { backgroundColor: '#ffffff', borderRadius: 14, marginTop: 8, borderWidth: 1, borderColor: '#e6ebff', overflow: 'hidden' },
+  dropdownItem: { paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eef2ff' },
+  dropdownItemText: { color: '#243156', fontSize: 14, fontWeight: '600' },
+  dropdownItemTextActive: { color: '#4f7cff' },
 
   primaryBtn: { backgroundColor: '#4f7cff', borderRadius: 14, paddingVertical: 13, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6, marginTop: 4 },
   primaryBtnFlex: { flex: 1 },

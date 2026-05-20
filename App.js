@@ -5,7 +5,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { AntDesign, Feather, MaterialIcons } from '@expo/vector-icons';
+import { AntDesign, MaterialIcons } from '@expo/vector-icons';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import LoginScreen from './src/screens/LoginScreen';
@@ -13,9 +13,7 @@ import SignupScreen from './src/screens/SignupScreen';
 import OtpVerificationScreen from './src/screens/OtpVerificationScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import AppointmentsScreen from './src/screens/AppointmentsScreen';
-import PrescriptionsScreen from './src/screens/PrescriptionsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
-import { prescriptions } from './src/data/dummyData';
 import {
   extractAuthToken,
   extractUser,
@@ -25,6 +23,7 @@ import {
   verifyLoginOtp,
   verifySignupOtp
 } from './src/api/auth';
+import { setAuthToken } from './src/api/http';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -79,13 +78,13 @@ function AppContent() {
     () => ({
       headerShown: false,
       tabBarActiveTintColor: theme.primary,
-      tabBarInactiveTintColor: '#7a7a7a',
+      tabBarInactiveTintColor: '#8a93a8',
       tabBarStyle: [
         styles.tabBar,
         {
-          height: 58 + Math.max(insets.bottom, 8),
+          height: 64 + Math.max(insets.bottom, 8),
           paddingBottom: Math.max(insets.bottom, 8),
-          paddingTop: 6
+          paddingTop: 8
         }
       ],
       tabBarItemStyle: styles.tabBarItem,
@@ -102,6 +101,7 @@ function AppContent() {
       });
       const apiUser = extractUser(payload) || {};
       const token = extractAuthToken(payload);
+      setAuthToken(token);
       const resolvedUser = createUserProfile(
         {
           ...apiUser,
@@ -180,6 +180,7 @@ function AppContent() {
         });
         const apiUser = extractUser(payload) || {};
         const token = extractAuthToken(payload);
+        setAuthToken(token);
         const resolvedUser = createUserProfile(
           {
             ...apiUser,
@@ -197,6 +198,7 @@ function AppContent() {
         });
         const apiUser = extractUser(payload) || {};
         const token = extractAuthToken(payload);
+        setAuthToken(token);
         const resolvedUser = createUserProfile(
           {
             ...apiUser,
@@ -247,6 +249,7 @@ function AppContent() {
   };
 
   const handleLogout = () => {
+    setAuthToken('');
     setUser(null);
     setPendingAuth(null);
     showToast('Logged out successfully.', 'info');
@@ -281,7 +284,7 @@ function AppContent() {
           <Tab.Navigator screenOptions={screenOptions}>
             <Tab.Screen
               name="Home"
-              children={() => <HomeScreen user={user} prescriptions={prescriptions} />}
+              children={() => <HomeScreen user={user} />}
               options={{
                 tabBarIcon: ({ color }) => <AntDesign name="home" size={20} color={color} />
               }}
@@ -291,13 +294,6 @@ function AppContent() {
               children={() => <AppointmentsScreen user={user} onAppointmentCreated={handleAppointmentCreated} />}
               options={{
                 tabBarIcon: ({ color }) => <MaterialIcons name="event-note" size={20} color={color} />
-              }}
-            />
-            <Tab.Screen
-              name="Prescriptions"
-              children={() => <PrescriptionsScreen prescriptions={prescriptions} />}
-              options={{
-                tabBarIcon: ({ color }) => <Feather name="clipboard" size={20} color={color} />
               }}
             />
             <Tab.Screen
@@ -345,18 +341,21 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     borderTopWidth: 0,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 10,
-    backgroundColor: '#ffffff'
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    shadowColor: '#1c2742',
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
+    elevation: 12,
+    backgroundColor: '#ffffff',
+    position: 'absolute'
   },
   tabBarItem: {
-    paddingVertical: 1
+    paddingVertical: 2
   },
   tabBarLabel: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '800',
     marginBottom: 2
   },
   toast: {

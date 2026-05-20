@@ -12,6 +12,7 @@ export async function registerUser(data) {
       phoneNumber: normalizePhone(data.phoneNumber),
       pinCode: normalizePinCode(data.pinCode || data.pincode),
       password: data.password,
+      gender: data.gender,
       address: data.address,
       landmark: data.landmark,
       houseNumber: data.houseNumber,

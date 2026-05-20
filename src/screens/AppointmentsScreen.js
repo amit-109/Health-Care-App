@@ -14,10 +14,26 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
-import { createPatientAppointment, extractAppointments, extractServices, getPatientAppointmentsByUser, getServices } from '../api/patient';
+import * as Location from 'expo-location';
+import {
+  createPatientAppointment,
+  extractAppointments,
+  extractAvailableStaff,
+  extractServices,
+  getAvailableStaff,
+  getPatientAppointmentsByUser,
+  getServices
+} from '../api/patient';
+import AppointmentMapPicker from '../components/AppointmentMapPicker';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const pad = (n) => String(n).padStart(2, '0');
+const DEFAULT_MAP_REGION = {
+  latitude: 28.6139,
+  longitude: 77.209,
+  latitudeDelta: 0.08,
+  longitudeDelta: 0.08
+};
 
 const toIso = (date) => {
   if (!date) return '';
@@ -75,6 +91,27 @@ const formatTimeDisplay = (value) => {
 const buildSlotTimeRange = (startTime, endTime) => {
   if (!startTime || !endTime) return '';
   return `${startTime} - ${endTime}`;
+};
+
+const formatTimeSpanValue = (value) => {
+  if (!value) return '';
+
+  const date = parseTimeValue(value);
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:00`;
+};
+
+const buildAvailabilitySlot = (startTime, endTime) => {
+  if (!startTime || !endTime) return '';
+  return `${formatTimeSpanValue(startTime)}-${formatTimeSpanValue(endTime)}`;
+};
+
+const getStaffId = (staff) => staff?.id || staff?.staffId || staff?.StaffId || staff?.userId || staff?.UserId || '';
+const getStaffLabel = (staff) => {
+  const id = getStaffId(staff);
+  const name = staff?.name || staff?.fullName || staff?.staffName || staff?.StaffName || staff?.userName || staff?.UserName;
+  const specialization = staff?.specialization || staff?.Specialization || staff?.role || staff?.Role;
+
+  return [name || (id ? `Staff #${id}` : 'Available staff'), specialization].filter(Boolean).join(' - ');
 };
 
 const formatAppointmentCard = (booking, serviceLabel) => {
@@ -212,7 +249,15 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
   const [noOfDays, setNoOfDays] = useState('1');
   const [dischargeDate, setDischargeDate] = useState('');
   const [doctorPrescription, setDoctorPrescription] = useState('');
+  const [doctorPrescriptionImage, setDoctorPrescriptionImage] = useState(null);
+  const [latitude, setLatitude] = useState('');
+  const [longitude, setLongitude] = useState('');
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [mapRegion, setMapRegion] = useState(DEFAULT_MAP_REGION);
   const [staffId, setStaffId] = useState('0');
+  const [availableStaff, setAvailableStaff] = useState([]);
+  const [availableStaffLoading, setAvailableStaffLoading] = useState(false);
+  const [availableStaffError, setAvailableStaffError] = useState('');
   const [diseaseImage, setDiseaseImage] = useState(null);
 
   useEffect(() => {
@@ -250,6 +295,49 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
     };
   }, [user?.id]);
 
+  useEffect(() => {
+    const slot = buildAvailabilitySlot(startTime.trim(), endTime.trim());
+
+    if (!appointmentDate.trim() || !slot) {
+      setAvailableStaff([]);
+      setAvailableStaffError('');
+      return;
+    }
+
+    let active = true;
+    setAvailableStaffLoading(true);
+    setAvailableStaffError('');
+
+    getAvailableStaff(appointmentDate.trim(), slot)
+      .then((payload) => {
+        if (!active) return;
+
+        const staff = extractAvailableStaff(payload);
+        setAvailableStaff(staff);
+        setStaffId((current) => {
+          if (current && current !== '0' && staff.some((s) => String(getStaffId(s)) === String(current))) {
+            return current;
+          }
+
+          const firstAvailableId = getStaffId(staff[0]);
+          return firstAvailableId ? String(firstAvailableId) : '0';
+        });
+      })
+      .catch((e) => {
+        if (!active) return;
+        setAvailableStaff([]);
+        setStaffId('0');
+        setAvailableStaffError(e.message || 'Unable to load available staff.');
+      })
+      .finally(() => {
+        if (active) setAvailableStaffLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [appointmentDate, startTime, endTime]);
+
   const selectedService = useMemo(
     () => services.find((s) => String(s.id || s.serviceId || s.ServiceId) === String(selectedServiceId)),
     [selectedServiceId, services]
@@ -259,7 +347,59 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
     selectedService?.serviceName || selectedService?.name || selectedService?.ServiceName ||
     (selectedServiceId ? `Service #${selectedServiceId}` : 'Select service');
 
-  const pickImage = async () => {
+  const selectedLocation = useMemo(() => {
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return null;
+    }
+
+    return { latitude: lat, longitude: lng };
+  }, [latitude, longitude]);
+
+  const setAppointmentLocation = ({ latitude: lat, longitude: lng }) => {
+    const nextLatitude = Number(lat);
+    const nextLongitude = Number(lng);
+
+    if (!Number.isFinite(nextLatitude) || !Number.isFinite(nextLongitude)) {
+      return;
+    }
+
+    setLatitude(nextLatitude.toFixed(6));
+    setLongitude(nextLongitude.toFixed(6));
+    setMapRegion((current) => ({
+      ...current,
+      latitude: nextLatitude,
+      longitude: nextLongitude
+    }));
+  };
+
+  const handleUseCurrentLocation = async () => {
+    setLocationLoading(true);
+    setError('');
+
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+
+      if (status !== 'granted') {
+        setError('Location permission is required to use your current location.');
+        return;
+      }
+
+      const current = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced
+      });
+
+      setAppointmentLocation(current.coords);
+    } catch (e) {
+      setError(e.message || 'Unable to get your current location.');
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
+  const pickImage = async (onSelect, fallbackName) => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       setError('Permission to access photos is required.');
@@ -274,7 +414,7 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
 
     if (!result.canceled && result.assets?.[0]) {
       const asset = result.assets[0];
-      setDiseaseImage({ uri: asset.uri, name: asset.fileName || 'disease-image.jpg', type: asset.mimeType || 'image/jpeg' });
+      onSelect({ uri: asset.uri, name: asset.fileName || fallbackName, type: asset.mimeType || 'image/jpeg' });
     }
   };
 
@@ -287,7 +427,15 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
     setNoOfDays('1');
     setDischargeDate('');
     setDoctorPrescription('');
+    setDoctorPrescriptionImage(null);
+    setLatitude('');
+    setLongitude('');
+    setMapRegion(DEFAULT_MAP_REGION);
+    setLocationLoading(false);
     setStaffId('0');
+    setAvailableStaff([]);
+    setAvailableStaffLoading(false);
+    setAvailableStaffError('');
     setServiceMenuOpen(false);
     setDiseaseImage(null);
     setError('');
@@ -311,6 +459,11 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
     return true;
   };
 
+  const handleAppointmentDateChange = (value) => {
+    setAppointmentDate(value);
+    setDischargeDate((current) => current || value);
+  };
+
   const handleBook = async () => {
     setError('');
 
@@ -320,6 +473,16 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
     }
 
     if (!validateTimeRange()) {
+      return;
+    }
+
+    if (availableStaffLoading) {
+      setError('Please wait while available staff is loading.');
+      return;
+    }
+
+    if (!availableStaff.length || !Number(staffId)) {
+      setError('Please select an available staff member for this slot.');
       return;
     }
 
@@ -338,6 +501,9 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
         serviceId: Number(selectedServiceId),
         dischargeDate: dischargeDate.trim() || appointmentDate.trim(),
         doctorPrescription: doctorPrescription.trim(),
+        doctorPrescriptionImage,
+        latitude: latitude.trim(),
+        longitude: longitude.trim(),
         staffId: Number(staffId) || 0,
         diseaseImage
       });
@@ -416,7 +582,10 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
         <TouchableOpacity style={styles.backBtn} onPress={() => { resetForm(); setView('list'); }}>
           <MaterialIcons name="arrow-back-ios" size={18} color="#4f7cff" />
         </TouchableOpacity>
-        <Text style={[styles.title, { marginBottom: 0 }]}>Book Appointment</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.title, { marginBottom: 0 }]}>Book Appointment</Text>
+          <Text style={styles.formSubtitle}>{formTab === 0 ? 'Tell us what care you need' : 'Choose date, time, and staff'}</Text>
+        </View>
       </View>
 
       <View style={styles.tabBar}>
@@ -462,8 +631,8 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Disease / Reason *</Text>
-              <TextInput style={styles.input} placeholder="Enter disease name" value={diseaseName} onChangeText={setDiseaseName} editable={!loading} />
+              <Text style={styles.label}>Reason *</Text>
+              <TextInput style={styles.input} placeholder="What do you need help with?" value={diseaseName} onChangeText={setDiseaseName} editable={!loading} />
             </View>
 
             <View style={styles.inputGroup}>
@@ -480,7 +649,7 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Disease Image (optional)</Text>
-              <TouchableOpacity style={styles.imagePicker} onPress={pickImage} disabled={loading}>
+              <TouchableOpacity style={styles.imagePicker} onPress={() => pickImage(setDiseaseImage, 'disease-image.jpg')} disabled={loading}>
                 {diseaseImage ? (
                   <Image source={{ uri: diseaseImage.uri }} style={styles.imagePreview} resizeMode="cover" />
                 ) : (
@@ -498,8 +667,64 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Staff ID</Text>
-              <TextInput style={styles.input} placeholder="0" value={staffId} onChangeText={setStaffId} editable={!loading} keyboardType="numeric" />
+              <Text style={styles.label}>Doctor Prescription Image (optional)</Text>
+              <TouchableOpacity style={styles.imagePicker} onPress={() => pickImage(setDoctorPrescriptionImage, 'doctor-prescription-image.jpg')} disabled={loading}>
+                {doctorPrescriptionImage ? (
+                  <Image source={{ uri: doctorPrescriptionImage.uri }} style={styles.imagePreview} resizeMode="cover" />
+                ) : (
+                  <View style={styles.imagePlaceholder}>
+                    <MaterialIcons name="add-photo-alternate" size={28} color="#4f7cff" />
+                    <Text style={styles.imagePlaceholderText}>Tap to upload prescription</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              {doctorPrescriptionImage ? (
+                <TouchableOpacity style={styles.removeImage} onPress={() => setDoctorPrescriptionImage(null)}>
+                  <MaterialIcons name="close" size={14} color="#fff" />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Appointment Location (Optional)</Text>
+              <TouchableOpacity
+                disabled={loading || locationLoading}
+                style={[styles.locationButton, (loading || locationLoading) && styles.btnDisabled]}
+                onPress={handleUseCurrentLocation}
+              >
+                {locationLoading ? (
+                  <ActivityIndicator color="#ffffff" size="small" />
+                ) : (
+                  <>
+                    <MaterialIcons name="my-location" size={18} color="#ffffff" />
+                    <Text style={styles.locationButtonText}>Use My Current Location</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <Text style={styles.mapHint}>Or tap anywhere on the map to select location</Text>
+              <View style={styles.mapWrap}>
+                <AppointmentMapPicker
+                  region={mapRegion}
+                  selectedLocation={selectedLocation}
+                  onLocationSelect={setAppointmentLocation}
+                />
+              </View>
+              {selectedLocation ? (
+                <View style={styles.locationSummary}>
+                  <MaterialIcons name="place" size={16} color="#149688" />
+                  <Text style={styles.locationSummaryText}>
+                    {latitude}, {longitude}
+                  </Text>
+                  <TouchableOpacity onPress={() => { setLatitude(''); setLongitude(''); }}>
+                    <MaterialIcons name="close" size={17} color="#8a91a7" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.locationSummary}>
+                  <MaterialIcons name="place" size={16} color="#8a91a7" />
+                  <Text style={styles.locationEmptyText}>No location selected</Text>
+                </View>
+              )}
             </View>
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -510,7 +735,7 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
           </>
         ) : (
           <>
-            <DateField label="Appointment Date *" value={appointmentDate} onChange={setAppointmentDate} disabled={loading} />
+            <DateField label="Appointment Date *" value={appointmentDate} onChange={handleAppointmentDateChange} disabled={loading} />
             <TimeField label="Start Time *" value={startTime} onChange={setStartTime} disabled={loading} />
             <TimeField label="End Time *" value={endTime} onChange={setEndTime} disabled={loading} />
             {startTime && endTime ? (
@@ -519,18 +744,71 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
                 <Text style={styles.rangeSummaryText}>{buildSlotTimeRange(startTime, endTime)}</Text>
               </View>
             ) : null}
-            <DateField label="Discharge Date" value={dischargeDate} onChange={setDischargeDate} disabled={loading} />
+            {appointmentDate && startTime && endTime ? (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Available Staff</Text>
+                {availableStaffLoading ? (
+                  <View style={styles.staffStatus}>
+                    <ActivityIndicator color="#4f7cff" size="small" />
+                    <Text style={styles.staffStatusText}>Checking available staff...</Text>
+                  </View>
+                ) : availableStaff.length ? (
+                  <View style={styles.staffOptions}>
+                    {availableStaff.map((staff, index) => {
+                      const sid = String(getStaffId(staff) || index);
+                      const selected = String(staffId) === String(getStaffId(staff));
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>No. of Days</Text>
-              <TextInput style={styles.input} placeholder="1" value={noOfDays} onChangeText={setNoOfDays} editable={!loading} keyboardType="numeric" />
+                      return (
+                        <TouchableOpacity
+                          key={sid}
+                          style={[styles.staffOption, selected && styles.staffOptionActive]}
+                          onPress={() => setStaffId(String(getStaffId(staff) || '0'))}
+                          disabled={loading}
+                        >
+                          <MaterialIcons name={selected ? 'radio-button-checked' : 'radio-button-unchecked'} size={18} color={selected ? '#4f7cff' : '#8a91a7'} />
+                          <Text style={[styles.staffOptionText, selected && styles.staffOptionTextActive]}>{getStaffLabel(staff)}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <View style={styles.staffStatus}>
+                    <MaterialIcons name="person-off" size={18} color="#c94a59" />
+                    <Text style={[styles.staffStatusText, styles.staffStatusError]}>
+                      {availableStaffError || 'No staff available for this slot.'}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            ) : null}
+            <View style={styles.scheduleGrid}>
+              <DateField label="Discharge Date" value={dischargeDate} onChange={setDischargeDate} disabled={loading} />
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>No. of Days</Text>
+                <TextInput style={styles.input} placeholder="1" value={noOfDays} onChangeText={setNoOfDays} editable={!loading} keyboardType="numeric" />
+              </View>
             </View>
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
-            <TouchableOpacity disabled={loading || servicesLoading} style={[styles.submitBtn, (loading || servicesLoading) && styles.btnDisabled]} onPress={handleBook}>
-              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Confirm Booking</Text>}
-            </TouchableOpacity>
+            <View style={styles.actionRow}>
+              <TouchableOpacity disabled={loading} style={styles.secondaryBtn} onPress={() => { setError(''); setFormTab(0); }}>
+                <MaterialIcons name="arrow-back" size={18} color="#4f7cff" />
+                <Text style={styles.secondaryBtnText}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                disabled={loading || servicesLoading || availableStaffLoading}
+                style={[styles.submitBtn, styles.actionSubmitBtn, (loading || servicesLoading || availableStaffLoading) && styles.btnDisabled]}
+                onPress={handleBook}
+              >
+                {loading ? <ActivityIndicator color="#fff" /> : (
+                  <>
+                    <MaterialIcons name="check-circle" size={18} color="#fff" />
+                    <Text style={styles.submitBtnText}>{availableStaffLoading ? 'Checking Staff' : 'Confirm Booking'}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
           </>
         )}
       </View>
@@ -540,8 +818,8 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#f5f7ff' },
-  content: { padding: 16, paddingBottom: 32 },
-  contentCompact: { padding: 12 },
+  content: { padding: 16, paddingBottom: 140 },
+  contentCompact: { padding: 12, paddingBottom: 140 },
 
   listHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   title: { fontSize: 22, fontWeight: '800', color: '#232b42', marginBottom: 14 },
@@ -568,6 +846,7 @@ const styles = StyleSheet.create({
 
   formHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
   backBtn: { padding: 4 },
+  formSubtitle: { color: '#7a849d', fontSize: 12, fontWeight: '700', marginTop: 4 },
 
   tabBar: { flexDirection: 'row', backgroundColor: '#eef2ff', borderRadius: 14, padding: 4, marginBottom: 16 },
   tabItem: { flex: 1, paddingVertical: 9, borderRadius: 11, alignItems: 'center' },
@@ -581,6 +860,14 @@ const styles = StyleSheet.create({
   label: { fontSize: 13, color: '#5a5f6e', marginBottom: 7, fontWeight: '600' },
   input: { backgroundColor: '#f3f5ff', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1f2540' },
   multilineInput: { minHeight: 80, textAlignVertical: 'top' },
+  locationButton: { backgroundColor: '#149688', borderRadius: 12, paddingVertical: 13, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
+  locationButtonText: { color: '#ffffff', fontSize: 14, fontWeight: '800' },
+  mapHint: { color: '#596585', fontSize: 12, marginTop: 10, marginBottom: 8, fontWeight: '600' },
+  mapWrap: { height: 210, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: '#d7ddf5', backgroundColor: '#eef2ff' },
+  map: { flex: 1 },
+  locationSummary: { marginTop: 10, backgroundColor: '#f3f5ff', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  locationSummaryText: { flex: 1, color: '#1f2d55', fontSize: 12, fontWeight: '700' },
+  locationEmptyText: { flex: 1, color: '#8a91a7', fontSize: 12, fontWeight: '700' },
 
   pickerButton: { backgroundColor: '#f3f5ff', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
   pickerText: { flex: 1, fontSize: 15, color: '#1f2540' },
@@ -590,6 +877,15 @@ const styles = StyleSheet.create({
   timePreviewText: { fontSize: 18, fontWeight: '700', color: '#1f2d55' },
   rangeSummary: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#eef4ff', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 14 },
   rangeSummaryText: { color: '#24408f', fontSize: 14, fontWeight: '700' },
+  staffStatus: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f3f5ff', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12 },
+  staffStatusText: { flex: 1, color: '#5f6b8d', fontSize: 13, fontWeight: '700' },
+  staffStatusError: { color: '#c94a59' },
+  staffOptions: { gap: 8 },
+  staffOption: { flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: '#f3f5ff', borderRadius: 14, paddingHorizontal: 13, paddingVertical: 12, borderWidth: 1, borderColor: '#e6ebff' },
+  staffOptionActive: { backgroundColor: '#eef4ff', borderColor: '#9bb4ff' },
+  staffOptionText: { flex: 1, color: '#596585', fontSize: 13, fontWeight: '700' },
+  staffOptionTextActive: { color: '#24408f' },
+  scheduleGrid: { marginBottom: 2 },
 
   dropdownButton: { backgroundColor: '#f3f5ff', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   dropdownText: { flex: 1, color: '#1f2540', fontSize: 15, paddingRight: 8 },
@@ -597,7 +893,11 @@ const styles = StyleSheet.create({
   dropdownItem: { paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eef2ff' },
   dropdownItemText: { color: '#243156', fontSize: 14 },
 
-  submitBtn: { marginTop: 8, backgroundColor: '#4f7cff', borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  actionRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  secondaryBtn: { minWidth: 96, borderWidth: 1, borderColor: '#cbd7ff', backgroundColor: '#f3f5ff', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
+  secondaryBtnText: { color: '#4f7cff', fontSize: 15, fontWeight: '800' },
+  submitBtn: { marginTop: 8, backgroundColor: '#4f7cff', borderRadius: 14, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7 },
+  actionSubmitBtn: { flex: 1, marginTop: 0 },
   submitBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   btnDisabled: { opacity: 0.75 },
 

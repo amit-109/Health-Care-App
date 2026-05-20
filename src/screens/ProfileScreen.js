@@ -1,65 +1,99 @@
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
-import { MaterialIcons, Entypo } from '@expo/vector-icons';
-import { useState } from 'react';
+import { MaterialIcons } from '@expo/vector-icons';
+import { useMemo, useState } from 'react';
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const getInitials = (name = 'P') =>
+  name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('') || 'P';
+
+const display = (value, fallback = 'Not provided') => {
+  if (value === 0) return '0';
+  return value ? String(value) : fallback;
+};
+
+function DetailRow({ icon, label, value }) {
+  return (
+    <View style={styles.detailRow}>
+      <View style={styles.detailIcon}>
+        <MaterialIcons name={icon} size={18} color="#4f7cff" />
+      </View>
+      <View style={styles.detailCopy}>
+        <Text style={styles.detailLabel}>{label}</Text>
+        <Text style={styles.detailValue} numberOfLines={2}>{display(value)}</Text>
+      </View>
+    </View>
+  );
+}
 
 export default function ProfileScreen({ user, onLogout }) {
   const { width } = useWindowDimensions();
   const compact = width < 380;
   const [loggingOut, setLoggingOut] = useState(false);
 
-  const fields = [
-    { icon: 'email', label: 'Email', value: user.email },
-    { icon: 'phone', label: 'Phone', value: user.phone },
-    { icon: 'cake', label: 'Age', value: `${user.age} yrs` },
-    { icon: 'person', label: 'Gender', value: user.gender },
-    { icon: 'opacity', label: 'Blood Group', value: user.bloodGroup },
-    { icon: 'location-city', label: 'City', value: user.city }
-  ];
+  const address = useMemo(
+    () => [user.houseNumber, user.address, user.landmark, user.city].filter(Boolean).join(', '),
+    [user.address, user.city, user.houseNumber, user.landmark]
+  );
 
   const handleLogoutPress = async () => {
     setLoggingOut(true);
-    await wait(350);
+    await wait(250);
     onLogout();
     setLoggingOut(false);
   };
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={[styles.content, compact && styles.contentCompact]} showsVerticalScrollIndicator={false}>
-      <View style={[styles.headerCard, compact && styles.headerCardCompact]}>
-        <View>
-          <Text style={[styles.name, compact && styles.nameCompact]}>{user.name}</Text>
-          <Text style={styles.status}>Patient Profile</Text>
+      <Text style={[styles.title, compact && styles.titleCompact]}>Profile</Text>
+
+      <View style={styles.profileCard}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{getInitials(user.name)}</Text>
         </View>
-        <View style={[styles.iconBackground, compact && styles.iconBackgroundCompact]}>
-          <Entypo name="heart" size={compact ? 22 : 24} color="#ffffff" />
+        <View style={styles.profileCopy}>
+          <Text style={styles.name} numberOfLines={1}>{display(user.name, 'Patient')}</Text>
+          <Text style={styles.meta} numberOfLines={1}>{display(user.phone, 'Phone not added')}</Text>
+        </View>
+        <View style={styles.activePill}>
+          <MaterialIcons name="verified" size={14} color="#149688" />
+          <Text style={styles.activeText}>Active</Text>
         </View>
       </View>
 
-      <View style={styles.infoCard}>
-        {fields.map((field) => (
-          <View style={styles.fieldRow} key={field.label}>
-            <MaterialIcons name={field.icon} size={19} color="#4f7cff" />
-            <View style={styles.fieldText}>
-              <Text style={styles.label}>{field.label}</Text>
-              <Text style={styles.value}>{field.value}</Text>
-            </View>
-          </View>
-        ))}
+      <View style={styles.quickStats}>
+        <View style={styles.statBox}>
+          <Text style={styles.statValue}>{display(user.age, '--')}</Text>
+          <Text style={styles.statLabel}>Age</Text>
+        </View>
+        <View style={styles.statBox}>
+          <Text style={styles.statValue}>{display(user.gender, '--')}</Text>
+          <Text style={styles.statLabel}>Gender</Text>
+        </View>
+        <View style={styles.statBox}>
+          <Text style={styles.statValue}>{display(user.bloodGroup, '--')}</Text>
+          <Text style={styles.statLabel}>Blood</Text>
+        </View>
       </View>
 
-      <View style={styles.noteCard}>
-        <Text style={styles.noteTitle}>Health Reminder</Text>
-        <Text style={styles.noteText}>Stay hydrated, keep walking daily, and review your medications before bedtime.</Text>
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>Contact</Text>
+        <DetailRow icon="phone" label="Phone" value={user.phone} />
+        <DetailRow icon="email" label="Email" value={user.email} />
+        <DetailRow icon="place" label="Address" value={address} />
       </View>
 
       <TouchableOpacity disabled={loggingOut} style={[styles.logoutButton, loggingOut && styles.buttonDisabled]} onPress={handleLogoutPress}>
         {loggingOut ? (
-          <ActivityIndicator color="#ffffff" />
+          <ActivityIndicator color="#e84d5b" />
         ) : (
           <>
-            <MaterialIcons name="logout" size={19} color="#ffffff" />
+            <MaterialIcons name="logout" size={18} color="#e84d5b" />
             <Text style={styles.logoutText}>Logout</Text>
           </>
         )}
@@ -69,120 +103,76 @@ export default function ProfileScreen({ user, onLogout }) {
 }
 
 const styles = StyleSheet.create({
-  page: {
-    flex: 1,
-    backgroundColor: '#f5f7ff'
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 24
-  },
-  contentCompact: {
-    padding: 14
-  },
-  headerCard: {
-    backgroundColor: '#4f7cff',
-    borderRadius: 20,
-    padding: 18,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 18,
-    shadowColor: '#4f7cff',
-    shadowOpacity: 0.16,
-    shadowRadius: 18,
-    elevation: 8
-  },
-  headerCardCompact: {
-    padding: 16
-  },
-  name: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#ffffff'
-  },
-  nameCompact: {
-    fontSize: 20
-  },
-  status: {
-    marginTop: 6,
-    color: '#d7e3ff',
-    fontSize: 13
-  },
-  iconBackground: {
-    width: 54,
-    height: 54,
-    borderRadius: 16,
-    backgroundColor: '#2e57ff',
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  iconBackgroundCompact: {
-    width: 48,
-    height: 48
-  },
-  infoCard: {
+  page: { flex: 1, backgroundColor: '#f5f7ff' },
+  content: { padding: 16, paddingBottom: 132 },
+  contentCompact: { padding: 12, paddingBottom: 128 },
+  title: { color: '#16213f', fontSize: 26, fontWeight: '900', marginBottom: 16 },
+  titleCompact: { fontSize: 23 },
+
+  profileCard: {
     backgroundColor: '#ffffff',
     borderRadius: 20,
-    padding: 18,
-    shadowColor: '#2f3a4a',
-    shadowOpacity: 0.05,
-    shadowRadius: 14,
-    elevation: 6
-  },
-  fieldRow: {
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16
+    borderWidth: 1,
+    borderColor: '#e8edf7',
+    shadowColor: '#1c2742',
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    elevation: 5
   },
-  fieldText: {
-    marginLeft: 12,
-    flex: 1
+  avatar: { width: 58, height: 58, borderRadius: 18, backgroundColor: '#e9f1ff', alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: '#4f7cff', fontSize: 20, fontWeight: '900' },
+  profileCopy: { flex: 1, marginLeft: 12 },
+  name: { color: '#16213f', fontSize: 18, fontWeight: '900' },
+  meta: { color: '#74809a', fontSize: 12, fontWeight: '700', marginTop: 4 },
+  activePill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#e8fbf4', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 6 },
+  activeText: { color: '#149688', fontSize: 11, fontWeight: '900' },
+
+  quickStats: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  statBox: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e8edf7'
   },
-  label: {
-    color: '#7d86a1',
-    fontSize: 12,
-    marginBottom: 3
-  },
-  value: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1f2d55'
-  },
-  noteCard: {
-    backgroundColor: '#eef3ff',
-    borderRadius: 18,
+  statValue: { color: '#16213f', fontSize: 16, fontWeight: '900' },
+  statLabel: { color: '#74809a', fontSize: 11, fontWeight: '800', marginTop: 4 },
+
+  sectionCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
     padding: 16,
-    marginTop: 18
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#e8edf7',
+    shadowColor: '#1c2742',
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3
   },
-  noteTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#2d3d6d',
-    marginBottom: 8
-  },
-  noteText: {
-    color: '#5f677f',
-    lineHeight: 20,
-    fontSize: 13
-  },
+  sectionTitle: { color: '#16213f', fontSize: 17, fontWeight: '900', marginBottom: 2 },
+  detailRow: { flexDirection: 'row', alignItems: 'center', paddingTop: 14 },
+  detailIcon: { width: 38, height: 38, borderRadius: 13, backgroundColor: '#eef3ff', alignItems: 'center', justifyContent: 'center' },
+  detailCopy: { flex: 1, marginLeft: 12 },
+  detailLabel: { color: '#74809a', fontSize: 12, fontWeight: '800' },
+  detailValue: { color: '#16213f', fontSize: 14, fontWeight: '800', marginTop: 3, lineHeight: 19 },
+
   logoutButton: {
-    marginTop: 18,
-    backgroundColor: '#ff6a6a',
+    marginTop: 14,
+    backgroundColor: '#fff0f2',
     borderRadius: 16,
     paddingVertical: 14,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    minHeight: 48
+    borderWidth: 1,
+    borderColor: '#ffd6dc'
   },
-  logoutText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '700',
-    marginLeft: 8
-  },
-  buttonDisabled: {
-    opacity: 0.8
-  }
+  logoutText: { color: '#e84d5b', fontSize: 15, fontWeight: '900', marginLeft: 8 },
+  buttonDisabled: { opacity: 0.8 }
 });

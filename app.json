@@ -15,9 +15,16 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Allow location access to set your appointment address."
+      }
     },
     "android": {
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/careslot-logo.png",
         "backgroundColor": "#ffffff"
@@ -31,6 +38,7 @@
     },
     "plugins": [
       "expo-font",
+      "expo-location",
       "@react-native-community/datetimepicker"
     ]
   }
