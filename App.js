@@ -11,6 +11,7 @@ import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-
 import LoginScreen from './src/screens/LoginScreen';
 import SignupScreen from './src/screens/SignupScreen';
 import OtpVerificationScreen from './src/screens/OtpVerificationScreen';
+import AboutScreen from './src/screens/AboutScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import AppointmentsScreen from './src/screens/AppointmentsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
@@ -60,7 +61,7 @@ function AppContent() {
   const [user, setUser] = useState(null);
   const [pendingAuth, setPendingAuth] = useState(null);
   const [toast, setToast] = useState(null);
-  const [theme] = useState({ primary: '#4f7cff', background: '#f5f7ff' });
+  const [theme] = useState({ primary: '#0891b2', background: '#f0f9ff' });
 
   const showToast = (message, type = 'info') => {
     if (toastTimerRef.current) {
@@ -265,6 +266,7 @@ function AppContent() {
             <Stack.Screen name="Login">
               {(props) => <LoginScreen {...props} onPasswordLogin={handlePasswordLogin} onOtpLogin={handleSendOtpLogin} />}
             </Stack.Screen>
+            <Stack.Screen name="About" component={AboutScreen} />
             <Stack.Screen name="Signup">
               {(props) => <SignupScreen {...props} onRegister={handleRegister} />}
             </Stack.Screen>
@@ -340,13 +342,14 @@ const styles = StyleSheet.create({
     flex: 1
   },
   tabBar: {
-    borderTopWidth: 0,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
-    shadowColor: '#1c2742',
-    shadowOpacity: 0.1,
-    shadowRadius: 14,
-    elevation: 12,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 10,
     backgroundColor: '#ffffff',
     position: 'absolute'
   },
@@ -371,13 +374,13 @@ const styles = StyleSheet.create({
     elevation: 6
   },
   toastSuccess: {
-    backgroundColor: '#2f9e62'
+    backgroundColor: '#059669'
   },
   toastError: {
-    backgroundColor: '#df5b5b'
+    backgroundColor: '#dc2626'
   },
   toastInfo: {
-    backgroundColor: '#395dff'
+    backgroundColor: '#0891b2'
   },
   toastText: {
     color: '#ffffff',

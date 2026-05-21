@@ -12,6 +12,7 @@ import {
   useWindowDimensions
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { C } from '../config/theme';
 
 export default function LoginScreen({ navigation, onPasswordLogin, onOtpLogin }) {
   const { width } = useWindowDimensions();
@@ -66,6 +67,17 @@ export default function LoginScreen({ navigation, onPasswordLogin, onOtpLogin })
         <View style={[styles.card, compact && styles.cardCompact]}>
           <Text style={[styles.title, compact && styles.titleCompact]}>Patient Sign In</Text>
           <Text style={[styles.subtitle, compact && styles.subtitleCompact]}>Login with password or receive OTP on your phone.</Text>
+
+          <TouchableOpacity disabled={loading} style={styles.aboutButton} onPress={() => navigation.navigate('About')}>
+            <View style={styles.aboutIcon}>
+              <MaterialIcons name="info-outline" size={18} color="#1c35ff" />
+            </View>
+            <View style={styles.aboutCopy}>
+              <Text style={styles.aboutTitle}>About this app</Text>
+              <Text style={styles.aboutText}>Care services, appointment flow, and patient support.</Text>
+            </View>
+            <MaterialIcons name="arrow-forward" size={18} color="#1c35ff" />
+          </TouchableOpacity>
 
           <View style={styles.modeRow}>
             <TouchableOpacity disabled={loading} onPress={() => setMode('password')} style={[styles.modeButton, mode === 'password' && styles.modeActive]}>
@@ -131,131 +143,34 @@ export default function LoginScreen({ navigation, onPasswordLogin, onOtpLogin })
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f6f8ff'
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: 18
-  },
-  scrollContentCompact: {
-    padding: 14
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 22,
-    padding: 22,
-    shadowColor: '#2f3a4a',
-    shadowOpacity: 0.06,
-    shadowRadius: 18,
-    elevation: 8
-  },
-  cardCompact: {
-    padding: 18,
-    borderRadius: 18
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '800',
-    marginBottom: 6,
-    color: '#242a40'
-  },
-  titleCompact: {
-    fontSize: 21
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#6d7484',
-    marginBottom: 18,
-    lineHeight: 21
-  },
-  subtitleCompact: {
-    fontSize: 13
-  },
-  modeRow: {
-    flexDirection: 'row',
-    marginBottom: 16,
-    borderRadius: 16,
-    backgroundColor: '#eef3ff',
-    padding: 4
-  },
-  modeButton: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 12
-  },
-  modeActive: {
-    backgroundColor: '#4f7cff'
-  },
-  modeText: {
-    color: '#5a5f6e',
-    fontWeight: '700',
-    fontSize: 13
-  },
-  modeTextActive: {
-    color: '#ffffff'
-  },
-  inputGroup: {
-    marginBottom: 14
-  },
-  label: {
-    fontSize: 13,
-    color: '#5a5f6e',
-    marginBottom: 7
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f3f5ff',
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 11
-  },
-  input: {
-    marginLeft: 10,
-    fontSize: 15,
-    flex: 1,
-    color: '#1f2540'
-  },
-  loginButton: {
-    marginTop: 6,
-    backgroundColor: '#4f7cff',
-    borderRadius: 14,
-    paddingVertical: 13,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  buttonDisabled: {
-    opacity: 0.8
-  },
-  loginText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '700'
-  },
-  signupRow: {
-    marginTop: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  signupText: {
-    color: '#7d86a1',
-    fontSize: 13
-  },
-  signupLink: {
-    color: '#4f7cff',
-    marginLeft: 8,
-    fontWeight: '700',
-    fontSize: 13
-  },
-  error: {
-    color: '#c94a59',
-    marginTop: 2,
-    marginBottom: 6,
-    fontSize: 12
-  }
+  container:            { flex: 1, backgroundColor: C.primary },
+  scrollContent:        { flexGrow: 1, justifyContent: 'center', padding: 18 },
+  scrollContentCompact: { padding: 14 },
+  card:        { backgroundColor: C.bgCard, borderRadius: 26, padding: 22, shadowColor: C.primaryDark, shadowOpacity: 0.2, shadowRadius: 22, elevation: 10, borderWidth: 1, borderColor: C.border },
+  cardCompact: { padding: 18, borderRadius: 20 },
+  title:        { fontSize: 24, fontWeight: '800', marginBottom: 6, color: C.textPrimary },
+  titleCompact: { fontSize: 21 },
+  subtitle:        { fontSize: 14, color: C.textSecondary, marginBottom: 18, lineHeight: 21 },
+  subtitleCompact: { fontSize: 13 },
+  modeRow:    { flexDirection: 'row', marginBottom: 16, borderRadius: 16, backgroundColor: C.primaryLight, padding: 4 },
+  aboutButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.bgMuted, borderRadius: 18, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: C.border, gap: 10 },
+  aboutIcon:  { width: 38, height: 38, borderRadius: 14, backgroundColor: C.primaryLight, alignItems: 'center', justifyContent: 'center' },
+  aboutCopy:  { flex: 1 },
+  aboutTitle: { color: C.textPrimary, fontSize: 13, fontWeight: '800' },
+  aboutText:  { color: C.textSecondary, fontSize: 12, fontWeight: '500', marginTop: 2, lineHeight: 17 },
+  modeButton:     { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 12 },
+  modeActive:     { backgroundColor: C.primary },
+  modeText:       { color: C.textSecondary, fontWeight: '700', fontSize: 13 },
+  modeTextActive: { color: '#fff' },
+  inputGroup: { marginBottom: 14 },
+  label:      { fontSize: 13, color: C.textSecondary, marginBottom: 7, fontWeight: '600' },
+  inputRow:   { flexDirection: 'row', alignItems: 'center', backgroundColor: C.bgMuted, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 11, borderWidth: 1, borderColor: C.border },
+  input:      { marginLeft: 10, fontSize: 15, flex: 1, color: C.textPrimary },
+  loginButton:    { marginTop: 6, backgroundColor: C.primary, borderRadius: 16, paddingVertical: 13, alignItems: 'center', justifyContent: 'center', shadowColor: C.primaryDark, shadowOpacity: 0.22, shadowRadius: 10, elevation: 4 },
+  buttonDisabled: { opacity: 0.8 },
+  loginText:  { color: '#fff', fontSize: 15, fontWeight: '700' },
+  signupRow:  { marginTop: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  signupText: { color: C.textMuted, fontSize: 13 },
+  signupLink: { color: C.primary, marginLeft: 8, fontWeight: '700', fontSize: 13 },
+  error:      { color: C.danger, marginTop: 2, marginBottom: 6, fontSize: 12 }
 });

@@ -103,7 +103,7 @@ export default function OtpVerificationScreen({ navigation, authType, contact, o
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f6f8ff'
+    backgroundColor: '#1c35ff'
   },
   scrollContent: {
     flexGrow: 1,
@@ -115,12 +115,14 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#ffffff',
-    borderRadius: 22,
+    borderRadius: 26,
     padding: 22,
-    shadowColor: '#2f3a4a',
-    shadowOpacity: 0.06,
-    shadowRadius: 18,
-    elevation: 8
+    shadowColor: '#07156f',
+    shadowOpacity: 0.22,
+    shadowRadius: 22,
+    elevation: 10,
+    borderWidth: 1,
+    borderColor: '#eef1ff'
   },
   cardCompact: {
     padding: 18,
@@ -130,7 +132,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '800',
     marginBottom: 6,
-    color: '#242a40'
+    color: '#141c38'
   },
   titleCompact: {
     fontSize: 21
@@ -152,10 +154,12 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f3f5ff',
+    backgroundColor: '#f5f6ff',
     borderRadius: 14,
     paddingHorizontal: 12,
-    paddingVertical: 11
+    paddingVertical: 11,
+    borderWidth: 1,
+    borderColor: '#e4e8ff'
   },
   input: {
     marginLeft: 10,
@@ -164,7 +168,7 @@ const styles = StyleSheet.create({
     color: '#1f2540'
   },
   infoCard: {
-    backgroundColor: '#f7f9ff',
+    backgroundColor: '#edf0ff',
     borderRadius: 14,
     padding: 12,
     marginTop: 6
@@ -176,11 +180,15 @@ const styles = StyleSheet.create({
   },
   verifyButton: {
     marginTop: 16,
-    backgroundColor: '#4f7cff',
-    borderRadius: 14,
+    backgroundColor: '#1c35ff',
+    borderRadius: 16,
     paddingVertical: 13,
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    shadowColor: '#1c35ff',
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    elevation: 4
   },
   verifyText: {
     color: '#ffffff',
@@ -194,7 +202,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   resendText: {
-    color: '#4f7cff',
+    color: '#1c35ff',
     fontWeight: '700',
     fontSize: 13
   },
@@ -208,7 +216,7 @@ const styles = StyleSheet.create({
     fontSize: 13
   },
   loginLink: {
-    color: '#4f7cff',
+    color: '#1c35ff',
     marginLeft: 8,
     fontWeight: '700',
     fontSize: 13

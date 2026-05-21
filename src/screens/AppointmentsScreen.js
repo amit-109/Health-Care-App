@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
   Platform,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +15,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
+import { C } from '../config/theme';
 import * as Location from 'expo-location';
 import {
   createPatientAppointment,
@@ -33,6 +35,33 @@ const DEFAULT_MAP_REGION = {
   longitude: 77.209,
   latitudeDelta: 0.08,
   longitudeDelta: 0.08
+};
+
+const APPOINTMENT_STATUS_STYLES = {
+  Pending: { bg: '#fff3d6', text: '#9a6400', icon: '#f59e0b' },
+  Approved: { bg: '#e7efff', text: '#214ab3', icon: '#1c35ff' },
+  Confirmed: { bg: '#e7efff', text: '#214ab3', icon: '#1c35ff' },
+  Completed: { bg: '#e5f8ee', text: '#247a49', icon: '#149688' },
+  Cancelled: { bg: '#ffe6ea', text: '#b83246', icon: '#e84d5b' },
+  Rejected: { bg: '#ffe6ea', text: '#b83246', icon: '#e84d5b' }
+};
+
+const normalizeStatusLabel = (status) => {
+  if (status === 1) return 'Pending';
+  if (status === 2) return 'Approved';
+  if (status === 3) return 'Completed';
+  if (status === 4) return 'Cancelled';
+
+  const label = String(status || 'Pending').trim();
+  return label ? label.charAt(0).toUpperCase() + label.slice(1).toLowerCase() : 'Pending';
+};
+
+const getAppointmentStatusStyle = (status) => {
+  const label = normalizeStatusLabel(status);
+  return {
+    label,
+    ...(APPOINTMENT_STATUS_STYLES[label] || APPOINTMENT_STATUS_STYLES.Pending)
+  };
 };
 
 const toIso = (date) => {
@@ -236,6 +265,7 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
   const [formTab, setFormTab] = useState(0);
   const [appointments, setAppointments] = useState([]);
   const [apptLoading, setApptLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [services, setServices] = useState([]);
   const [servicesLoading, setServicesLoading] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -260,40 +290,44 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
   const [availableStaffError, setAvailableStaffError] = useState('');
   const [diseaseImage, setDiseaseImage] = useState(null);
 
-  useEffect(() => {
-    let active = true;
-    const loadAll = async () => {
-      if (!user?.id) {
-        if (active) {
-          setAppointments([]);
-          setApptLoading(false);
-          setServicesLoading(false);
-          setError('Unable to load appointments for this user.');
-        }
-        return;
-      }
+  const loadAll = useCallback(async (silent = false) => {
+    if (!user?.id) {
+      setAppointments([]);
+      setApptLoading(false);
+      setServicesLoading(false);
+      setRefreshing(false);
+      setError('Unable to load appointments for this user.');
+      return;
+    }
 
-      try {
-        const [apptPayload, svcPayload] = await Promise.all([getPatientAppointmentsByUser(user.id), getServices()]);
-        if (active) {
-          setAppointments(extractAppointments(apptPayload));
-          setServices(extractServices(svcPayload));
-        }
-      } catch (e) {
-        if (active) setError(e.message || 'Unable to load data.');
-      } finally {
-        if (active) {
-          setApptLoading(false);
-          setServicesLoading(false);
-        }
-      }
-    };
+    if (!silent) {
+      setApptLoading(true);
+      setServicesLoading(true);
+    }
 
-    loadAll();
-    return () => {
-      active = false;
-    };
+    setError('');
+
+    try {
+      const [apptPayload, svcPayload] = await Promise.all([getPatientAppointmentsByUser(user.id), getServices()]);
+      setAppointments(extractAppointments(apptPayload));
+      setServices(extractServices(svcPayload));
+    } catch (e) {
+      setError(e.message || 'Unable to load data.');
+    } finally {
+      setApptLoading(false);
+      setServicesLoading(false);
+      setRefreshing(false);
+    }
   }, [user?.id]);
+
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    loadAll(true);
+  };
 
   useEffect(() => {
     const slot = buildAvailabilitySlot(startTime.trim(), endTime.trim());
@@ -522,38 +556,52 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
 
   if (view === 'list') {
     return (
-      <ScrollView style={styles.page} contentContainerStyle={[styles.content, compact && styles.contentCompact]} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.page}
+        contentContainerStyle={[styles.content, compact && styles.contentCompact]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#1c35ff" colors={['#1c35ff']} />}
+      >
         <View style={styles.listHeader}>
           <Text style={[styles.title, compact && styles.titleCompact]}>My Appointments</Text>
-          <TouchableOpacity style={styles.bookBtn} onPress={() => setView('form')}>
-            <MaterialIcons name="add" size={18} color="#fff" />
-            <Text style={styles.bookBtnText}>Book Appointment</Text>
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity style={styles.iconBtn} onPress={handleRefresh} disabled={refreshing || apptLoading}>
+              {refreshing ? <ActivityIndicator color="#fff" size="small" /> : <MaterialIcons name="refresh" size={18} color="#fff" />}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.bookBtn} onPress={() => setView('form')}>
+              <MaterialIcons name="add" size={18} color="#fff" />
+              <Text style={styles.bookBtnText}>Book Appointment</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {apptLoading ? (
           <ActivityIndicator color="#4f7cff" style={{ marginTop: 32 }} />
         ) : appointments.length ? (
-          appointments.map((item) => (
-            <View key={item.id} style={[styles.card, compact && styles.cardCompact]}>
-              <View style={styles.cardHeader}>
-                <View style={styles.cardIconWrap}>
-                  <MaterialIcons name="event-note" size={20} color="#4f7cff" />
+          appointments.map((item) => {
+            const statusStyle = getAppointmentStatusStyle(item.status);
+
+            return (
+              <View key={item.id} style={[styles.card, compact && styles.cardCompact]}>
+                <View style={styles.cardHeader}>
+                  <View style={[styles.cardIconWrap, { backgroundColor: statusStyle.bg }]}>
+                    <MaterialIcons name="event-note" size={20} color={statusStyle.icon} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cardTitle}>{item.type}</Text>
+                    <Text style={styles.cardSub}>{item.doctor}</Text>
+                  </View>
+                  <Text style={[styles.status, { backgroundColor: statusStyle.bg, color: statusStyle.text }]}>{statusStyle.label}</Text>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.cardTitle}>{item.type}</Text>
-                  <Text style={styles.cardSub}>{item.doctor}</Text>
+                <View style={styles.cardFooter}>
+                  <MaterialIcons name="calendar-today" size={13} color="#8a91a7" />
+                  <Text style={styles.cardMeta}>  {item.date}</Text>
+                  <MaterialIcons name="access-time" size={13} color="#8a91a7" style={{ marginLeft: 10 }} />
+                  <Text style={styles.cardMeta}>  {item.time}</Text>
                 </View>
-                <Text style={[styles.status, item.status === 'Confirmed' ? styles.confirmed : styles.pending]}>{item.status}</Text>
               </View>
-              <View style={styles.cardFooter}>
-                <MaterialIcons name="calendar-today" size={13} color="#8a91a7" />
-                <Text style={styles.cardMeta}>  {item.date}</Text>
-                <MaterialIcons name="access-time" size={13} color="#8a91a7" style={{ marginLeft: 10 }} />
-                <Text style={styles.cardMeta}>  {item.time}</Text>
-              </View>
-            </View>
-          ))
+            );
+          })
         ) : (
           <View style={[styles.emptyCard, compact && styles.cardCompact]}>
             <MaterialIcons name="event-busy" size={40} color="#c5cbe8" />
@@ -565,7 +613,7 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
     );
   }
 
-  const TABS = ['Basic Info', 'Schedule'];
+  const TABS = ['Care Details', 'Schedule'];
 
   const handleNext = () => {
     if (!selectedServiceId || !diseaseName.trim()) {
@@ -580,10 +628,10 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
     <ScrollView style={styles.page} contentContainerStyle={[styles.content, compact && styles.contentCompact]} showsVerticalScrollIndicator={false}>
       <View style={styles.formHeader}>
         <TouchableOpacity style={styles.backBtn} onPress={() => { resetForm(); setView('list'); }}>
-          <MaterialIcons name="arrow-back-ios" size={18} color="#4f7cff" />
+          <MaterialIcons name="arrow-back" size={18} color="#ffffff" />
         </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.title, { marginBottom: 0 }]}>Book Appointment</Text>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[styles.title, { marginBottom: 0, fontSize: 19 }]} numberOfLines={1}>Book Appointment</Text>
           <Text style={styles.formSubtitle}>{formTab === 0 ? 'Tell us what care you need' : 'Choose date, time, and staff'}</Text>
         </View>
       </View>
@@ -598,6 +646,15 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
             <Text style={[styles.tabLabel, formTab === i && styles.tabLabelActive]}>{label}</Text>
           </TouchableOpacity>
         ))}
+      </View>
+
+      <View style={styles.progressBlock}>
+        <Text style={styles.progressLabel}>Step {formTab + 1} of 2</Text>
+        <View style={styles.progressTrack}>
+          {TABS.map((label, index) => (
+            <View key={label} style={[styles.progressSegment, index <= formTab && styles.progressSegmentActive]} />
+          ))}
+        </View>
       </View>
 
       <View style={[styles.formCard, compact && styles.cardCompact]}>
@@ -630,111 +687,166 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
               ) : null}
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Reason *</Text>
-              <TextInput style={styles.input} placeholder="What do you need help with?" value={diseaseName} onChangeText={setDiseaseName} editable={!loading} />
-            </View>
+            {!servicesLoading && services.length ? (
+              <View style={styles.serviceGrid}>
+                {services.slice(0, 6).map((s) => {
+                  const sid = String(s.id || s.serviceId || s.ServiceId);
+                  const lbl = s.serviceName || s.name || s.ServiceName || `Service #${sid}`;
+                  const selected = String(selectedServiceId) === sid;
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Doctor Prescription (optional)</Text>
-              <TextInput
-                style={[styles.input, styles.multilineInput]}
-                placeholder="Optional notes"
-                value={doctorPrescription}
-                onChangeText={setDoctorPrescription}
-                editable={!loading}
-                multiline
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Disease Image (optional)</Text>
-              <TouchableOpacity style={styles.imagePicker} onPress={() => pickImage(setDiseaseImage, 'disease-image.jpg')} disabled={loading}>
-                {diseaseImage ? (
-                  <Image source={{ uri: diseaseImage.uri }} style={styles.imagePreview} resizeMode="cover" />
-                ) : (
-                  <View style={styles.imagePlaceholder}>
-                    <MaterialIcons name="add-a-photo" size={28} color="#4f7cff" />
-                    <Text style={styles.imagePlaceholderText}>Tap to upload image</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-              {diseaseImage ? (
-                <TouchableOpacity style={styles.removeImage} onPress={() => setDiseaseImage(null)}>
-                  <MaterialIcons name="close" size={14} color="#fff" />
-                </TouchableOpacity>
-              ) : null}
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Doctor Prescription Image (optional)</Text>
-              <TouchableOpacity style={styles.imagePicker} onPress={() => pickImage(setDoctorPrescriptionImage, 'doctor-prescription-image.jpg')} disabled={loading}>
-                {doctorPrescriptionImage ? (
-                  <Image source={{ uri: doctorPrescriptionImage.uri }} style={styles.imagePreview} resizeMode="cover" />
-                ) : (
-                  <View style={styles.imagePlaceholder}>
-                    <MaterialIcons name="add-photo-alternate" size={28} color="#4f7cff" />
-                    <Text style={styles.imagePlaceholderText}>Tap to upload prescription</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-              {doctorPrescriptionImage ? (
-                <TouchableOpacity style={styles.removeImage} onPress={() => setDoctorPrescriptionImage(null)}>
-                  <MaterialIcons name="close" size={14} color="#fff" />
-                </TouchableOpacity>
-              ) : null}
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Appointment Location (Optional)</Text>
-              <TouchableOpacity
-                disabled={loading || locationLoading}
-                style={[styles.locationButton, (loading || locationLoading) && styles.btnDisabled]}
-                onPress={handleUseCurrentLocation}
-              >
-                {locationLoading ? (
-                  <ActivityIndicator color="#ffffff" size="small" />
-                ) : (
-                  <>
-                    <MaterialIcons name="my-location" size={18} color="#ffffff" />
-                    <Text style={styles.locationButtonText}>Use My Current Location</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-              <Text style={styles.mapHint}>Or tap anywhere on the map to select location</Text>
-              <View style={styles.mapWrap}>
-                <AppointmentMapPicker
-                  region={mapRegion}
-                  selectedLocation={selectedLocation}
-                  onLocationSelect={setAppointmentLocation}
-                />
+                  return (
+                    <TouchableOpacity
+                      key={sid}
+                      style={[styles.serviceChoice, selected && styles.serviceChoiceActive]}
+                      onPress={() => {
+                        setSelectedServiceId(sid);
+                        setServiceMenuOpen(false);
+                      }}
+                      disabled={loading}
+                    >
+                      <View style={[styles.serviceChoiceIcon, selected && styles.serviceChoiceIconActive]}>
+                        <MaterialIcons name="medical-services" size={18} color={selected ? '#ffffff' : C.primary} />
+                      </View>
+                      <Text style={[styles.serviceChoiceText, selected && styles.serviceChoiceTextActive]} numberOfLines={2}>{lbl}</Text>
+                      <MaterialIcons name="arrow-forward" size={17} color={selected ? '#ffffff' : '#1c35ff'} />
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-              {selectedLocation ? (
-                <View style={styles.locationSummary}>
-                  <MaterialIcons name="place" size={16} color="#149688" />
-                  <Text style={styles.locationSummaryText}>
-                    {latitude}, {longitude}
-                  </Text>
-                  <TouchableOpacity onPress={() => { setLatitude(''); setLongitude(''); }}>
-                    <MaterialIcons name="close" size={17} color="#8a91a7" />
+            ) : null}
+
+            {selectedServiceId ? (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Reason *</Text>
+                <TextInput style={styles.input} placeholder="What do you need help with?" value={diseaseName} onChangeText={setDiseaseName} editable={!loading} />
+              </View>
+            ) : (
+              <View style={styles.guidanceCard}>
+                <MaterialIcons name="touch-app" size={20} color="#1c35ff" />
+                <Text style={styles.guidanceText}>Select a service first. The next field will open after that.</Text>
+              </View>
+            )}
+
+            {diseaseName.trim() ? (
+              <>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Doctor Prescription (optional)</Text>
+                  <TextInput
+                    style={[styles.input, styles.multilineInput]}
+                    placeholder="Optional notes"
+                    value={doctorPrescription}
+                    onChangeText={setDoctorPrescription}
+                    editable={!loading}
+                    multiline
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Disease Image (optional)</Text>
+                  <TouchableOpacity style={styles.imagePicker} onPress={() => pickImage(setDiseaseImage, 'disease-image.jpg')} disabled={loading}>
+                    {diseaseImage ? (
+                      <Image source={{ uri: diseaseImage.uri }} style={styles.imagePreview} resizeMode="cover" />
+                    ) : (
+                      <View style={styles.imagePlaceholder}>
+                        <MaterialIcons name="add-a-photo" size={28} color="#4f7cff" />
+                        <Text style={styles.imagePlaceholderText}>Tap to upload image</Text>
+                      </View>
+                    )}
                   </TouchableOpacity>
+                  {diseaseImage ? (
+                    <TouchableOpacity style={styles.removeImage} onPress={() => setDiseaseImage(null)}>
+                      <MaterialIcons name="close" size={14} color="#fff" />
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
-              ) : (
-                <View style={styles.locationSummary}>
-                  <MaterialIcons name="place" size={16} color="#8a91a7" />
-                  <Text style={styles.locationEmptyText}>No location selected</Text>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Doctor Prescription Image (optional)</Text>
+                  <TouchableOpacity style={styles.imagePicker} onPress={() => pickImage(setDoctorPrescriptionImage, 'doctor-prescription-image.jpg')} disabled={loading}>
+                    {doctorPrescriptionImage ? (
+                      <Image source={{ uri: doctorPrescriptionImage.uri }} style={styles.imagePreview} resizeMode="cover" />
+                    ) : (
+                      <View style={styles.imagePlaceholder}>
+                        <MaterialIcons name="add-photo-alternate" size={28} color="#4f7cff" />
+                        <Text style={styles.imagePlaceholderText}>Tap to upload prescription</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                  {doctorPrescriptionImage ? (
+                    <TouchableOpacity style={styles.removeImage} onPress={() => setDoctorPrescriptionImage(null)}>
+                      <MaterialIcons name="close" size={14} color="#fff" />
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
-              )}
-            </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Appointment Location (Optional)</Text>
+                  <TouchableOpacity
+                    disabled={loading || locationLoading}
+                    style={[styles.locationButton, (loading || locationLoading) && styles.btnDisabled]}
+                    onPress={handleUseCurrentLocation}
+                  >
+                    {locationLoading ? (
+                      <ActivityIndicator color="#ffffff" size="small" />
+                    ) : (
+                      <>
+                        <MaterialIcons name="my-location" size={18} color="#ffffff" />
+                        <Text style={styles.locationButtonText}>Use My Current Location</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                  <Text style={styles.mapHint}>Or tap anywhere on the map to select location</Text>
+                  <View style={styles.mapWrap}>
+                    <AppointmentMapPicker
+                      region={mapRegion}
+                      selectedLocation={selectedLocation}
+                      onLocationSelect={setAppointmentLocation}
+                    />
+                  </View>
+                  {selectedLocation ? (
+                    <View style={styles.locationSummary}>
+                      <MaterialIcons name="place" size={16} color="#149688" />
+                      <Text style={styles.locationSummaryText}>
+                        {latitude}, {longitude}
+                      </Text>
+                      <TouchableOpacity onPress={() => { setLatitude(''); setLongitude(''); }}>
+                        <MaterialIcons name="close" size={17} color="#8a91a7" />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={styles.locationSummary}>
+                      <MaterialIcons name="place" size={16} color="#8a91a7" />
+                      <Text style={styles.locationEmptyText}>No location selected</Text>
+                    </View>
+                  )}
+                </View>
+              </>
+            ) : null}
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
-            <TouchableOpacity style={styles.submitBtn} onPress={handleNext}>
+            <TouchableOpacity disabled={!selectedServiceId || !diseaseName.trim()} style={[styles.submitBtn, (!selectedServiceId || !diseaseName.trim()) && styles.btnDisabled]} onPress={handleNext}>
               <Text style={styles.submitBtnText}>Next: Schedule</Text>
             </TouchableOpacity>
           </>
         ) : (
           <>
+            <View style={styles.dayMode}>
+              <TouchableOpacity
+                disabled={loading}
+                style={[styles.dayModeButton, noOfDays === '1' && styles.dayModeActive]}
+                onPress={() => setNoOfDays('1')}
+              >
+                <Text style={[styles.dayModeText, noOfDays === '1' && styles.dayModeTextActive]}>Single Day</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                disabled={loading}
+                style={[styles.dayModeButton, noOfDays !== '1' && styles.dayModeActive]}
+                onPress={() => setNoOfDays(noOfDays === '1' ? '2' : noOfDays)}
+              >
+                <Text style={[styles.dayModeText, noOfDays !== '1' && styles.dayModeTextActive]}>Multiple Days</Text>
+              </TouchableOpacity>
+            </View>
             <DateField label="Appointment Date *" value={appointmentDate} onChange={handleAppointmentDateChange} disabled={loading} />
             <TimeField label="Start Time *" value={startTime} onChange={setStartTime} disabled={loading} />
             <TimeField label="End Time *" value={endTime} onChange={setEndTime} disabled={loading} />
@@ -817,96 +929,117 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: '#f5f7ff' },
+  page: { flex: 1, backgroundColor: C.bg },
   content: { padding: 16, paddingBottom: 140 },
   contentCompact: { padding: 12, paddingBottom: 140 },
 
-  listHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  title: { fontSize: 22, fontWeight: '800', color: '#232b42', marginBottom: 14 },
-  titleCompact: { fontSize: 19 },
+  listHeader: { backgroundColor: C.primary, borderRadius: 24, paddingHorizontal: 16, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, shadowColor: C.primaryDark, shadowOpacity: 0.22, shadowRadius: 16, elevation: 8 },
+  title: { fontSize: 20, fontWeight: '900', color: '#ffffff', marginBottom: 0, flexShrink: 1 },
+  titleCompact: { fontSize: 17 },
 
-  bookBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#4f7cff', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 9, gap: 4 },
-  bookBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
+  iconBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#ffffff22', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#ffffff45' },
+  bookBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff22', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, gap: 4, borderWidth: 1, borderColor: '#ffffff45' },
+  bookBtnText: { color: '#fff', fontWeight: '700', fontSize: 12 },
 
-  card: { backgroundColor: '#fff', borderRadius: 18, padding: 16, marginBottom: 12, shadowColor: '#2f3a4a', shadowOpacity: 0.06, shadowRadius: 12, elevation: 5 },
+  card: { backgroundColor: C.bgCard, borderRadius: 20, padding: 16, marginBottom: 12, shadowColor: C.shadow, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3, borderWidth: 1, borderColor: C.border },
   cardCompact: { padding: 13 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10 },
-  cardIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#eef2ff', alignItems: 'center', justifyContent: 'center' },
-  cardTitle: { fontSize: 15, fontWeight: '700', color: '#1f2d55' },
-  cardSub: { fontSize: 12, color: '#6b7591', marginTop: 2 },
-  status: { fontSize: 11, fontWeight: '700', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10, color: '#fff', alignSelf: 'flex-start' },
-  confirmed: { backgroundColor: '#4f7cff' },
-  pending: { backgroundColor: '#f8b334' },
-  cardFooter: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#f0f2fa', paddingTop: 10 },
-  cardMeta: { fontSize: 12, color: '#8a91a7' },
+  cardIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: C.primaryLight, alignItems: 'center', justifyContent: 'center' },
+  cardTitle: { fontSize: 15, fontWeight: '700', color: C.textPrimary },
+  cardSub: { fontSize: 12, color: C.textSecondary, marginTop: 2 },
+  status: { fontSize: 11, fontWeight: '900', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10, alignSelf: 'flex-start', overflow: 'hidden' },
+  cardFooter: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: C.borderLight, paddingTop: 10 },
+  cardMeta: { fontSize: 12, color: C.textMuted },
 
-  emptyCard: { backgroundColor: '#fff', borderRadius: 18, padding: 32, alignItems: 'center', shadowColor: '#2f3a4a', shadowOpacity: 0.05, shadowRadius: 10, elevation: 4 },
-  emptyTitle: { fontSize: 16, fontWeight: '700', color: '#3a4060', marginTop: 12 },
-  emptyHint: { fontSize: 13, color: '#8a91a7', textAlign: 'center', marginTop: 6, lineHeight: 19 },
+  emptyCard: { backgroundColor: C.bgCard, borderRadius: 18, padding: 32, alignItems: 'center', shadowColor: C.shadow, shadowOpacity: 0.04, shadowRadius: 10, elevation: 2 },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: C.textPrimary, marginTop: 12 },
+  emptyHint: { fontSize: 13, color: C.textMuted, textAlign: 'center', marginTop: 6, lineHeight: 19 },
 
-  formHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
-  backBtn: { padding: 4 },
-  formSubtitle: { color: '#7a849d', fontSize: 12, fontWeight: '700', marginTop: 4 },
+  formHeader: { backgroundColor: C.primary, borderRadius: 26, paddingHorizontal: 16, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14, shadowColor: C.primaryDark, shadowOpacity: 0.22, shadowRadius: 18, elevation: 8 },
+  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#ffffff22', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  formSubtitle: { color: '#bae6fd', fontSize: 12, fontWeight: '700', marginTop: 3 },
 
-  tabBar: { flexDirection: 'row', backgroundColor: '#eef2ff', borderRadius: 14, padding: 4, marginBottom: 16 },
+  tabBar: { flexDirection: 'row', backgroundColor: C.bgCard, borderRadius: 18, padding: 5, marginBottom: 12, borderWidth: 1, borderColor: C.border },
   tabItem: { flex: 1, paddingVertical: 9, borderRadius: 11, alignItems: 'center' },
-  tabItemActive: { backgroundColor: '#4f7cff', shadowColor: '#4f7cff', shadowOpacity: 0.25, shadowRadius: 6, elevation: 3 },
-  tabLabel: { fontSize: 13, fontWeight: '600', color: '#6b7aaa' },
+  tabItemActive: { backgroundColor: C.primary, shadowColor: C.primaryDark, shadowOpacity: 0.2, shadowRadius: 6, elevation: 3 },
+  tabLabel: { fontSize: 13, fontWeight: '600', color: C.textMuted },
   tabLabelActive: { color: '#fff' },
 
-  formCard: { backgroundColor: '#fff', borderRadius: 20, padding: 18, shadowColor: '#2f3a4a', shadowOpacity: 0.06, shadowRadius: 14, elevation: 6 },
+  progressBlock: { backgroundColor: C.bgCard, borderRadius: 18, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: C.border },
+  progressLabel: { color: C.textSecondary, fontSize: 13, fontWeight: '700', marginBottom: 10 },
+  progressTrack: { flexDirection: 'row', gap: 8 },
+  progressSegment: { flex: 1, height: 5, borderRadius: 8, backgroundColor: C.border },
+  progressSegmentActive: { backgroundColor: C.primary },
+
+  formCard: { backgroundColor: C.bgCard, borderRadius: 24, padding: 18, shadowColor: C.shadow, shadowOpacity: 0.06, shadowRadius: 14, elevation: 4, borderWidth: 1, borderColor: C.border },
 
   inputGroup: { marginBottom: 14 },
-  label: { fontSize: 13, color: '#5a5f6e', marginBottom: 7, fontWeight: '600' },
-  input: { backgroundColor: '#f3f5ff', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1f2540' },
+  label: { fontSize: 13, color: C.textSecondary, marginBottom: 7, fontWeight: '600' },
+  input: { backgroundColor: C.bgMuted, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: C.textPrimary, borderWidth: 1, borderColor: C.border },
   multilineInput: { minHeight: 80, textAlignVertical: 'top' },
-  locationButton: { backgroundColor: '#149688', borderRadius: 12, paddingVertical: 13, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
-  locationButtonText: { color: '#ffffff', fontSize: 14, fontWeight: '800' },
-  mapHint: { color: '#596585', fontSize: 12, marginTop: 10, marginBottom: 8, fontWeight: '600' },
-  mapWrap: { height: 210, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: '#d7ddf5', backgroundColor: '#eef2ff' },
+  locationButton: { backgroundColor: C.accent, borderRadius: 12, paddingVertical: 13, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
+  locationButtonText: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
+  mapHint: { color: C.textSecondary, fontSize: 12, marginTop: 10, marginBottom: 8, fontWeight: '600' },
+  mapWrap: { height: 210, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: C.border, backgroundColor: C.primaryLight },
   map: { flex: 1 },
-  locationSummary: { marginTop: 10, backgroundColor: '#f3f5ff', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  locationSummaryText: { flex: 1, color: '#1f2d55', fontSize: 12, fontWeight: '700' },
-  locationEmptyText: { flex: 1, color: '#8a91a7', fontSize: 12, fontWeight: '700' },
+  locationSummary: { marginTop: 10, backgroundColor: C.bgMuted, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  locationSummaryText: { flex: 1, color: C.textPrimary, fontSize: 12, fontWeight: '700' },
+  locationEmptyText: { flex: 1, color: C.textMuted, fontSize: 12, fontWeight: '600' },
 
-  pickerButton: { backgroundColor: '#f3f5ff', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  pickerText: { flex: 1, fontSize: 15, color: '#1f2540' },
-  placeholderText: { color: '#8a91a7' },
-  nativePickerWrap: { marginTop: 10, borderWidth: 1, borderColor: '#e6ebff', borderRadius: 18, overflow: 'hidden', backgroundColor: '#fff' },
-  timePreview: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderTopWidth: 1, borderTopColor: '#eef2ff' },
-  timePreviewText: { fontSize: 18, fontWeight: '700', color: '#1f2d55' },
-  rangeSummary: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#eef4ff', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 14 },
-  rangeSummaryText: { color: '#24408f', fontSize: 14, fontWeight: '700' },
-  staffStatus: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f3f5ff', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12 },
-  staffStatusText: { flex: 1, color: '#5f6b8d', fontSize: 13, fontWeight: '700' },
-  staffStatusError: { color: '#c94a59' },
+  pickerButton: { backgroundColor: C.bgMuted, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: C.border },
+  pickerText: { flex: 1, fontSize: 15, color: C.textPrimary },
+  placeholderText: { color: C.textMuted },
+  nativePickerWrap: { marginTop: 10, borderWidth: 1, borderColor: C.border, borderRadius: 18, overflow: 'hidden', backgroundColor: C.bgCard },
+  timePreview: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderTopWidth: 1, borderTopColor: C.borderLight },
+  timePreviewText: { fontSize: 18, fontWeight: '700', color: C.textPrimary },
+  rangeSummary: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.primaryLight, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 14 },
+  rangeSummaryText: { color: C.primaryDark, fontSize: 14, fontWeight: '700' },
+  staffStatus: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.bgMuted, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12 },
+  staffStatusText: { flex: 1, color: C.textSecondary, fontSize: 13, fontWeight: '600' },
+  staffStatusError: { color: C.danger },
   staffOptions: { gap: 8 },
-  staffOption: { flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: '#f3f5ff', borderRadius: 14, paddingHorizontal: 13, paddingVertical: 12, borderWidth: 1, borderColor: '#e6ebff' },
-  staffOptionActive: { backgroundColor: '#eef4ff', borderColor: '#9bb4ff' },
-  staffOptionText: { flex: 1, color: '#596585', fontSize: 13, fontWeight: '700' },
-  staffOptionTextActive: { color: '#24408f' },
+  staffOption: { flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: C.bgMuted, borderRadius: 14, paddingHorizontal: 13, paddingVertical: 12, borderWidth: 1, borderColor: C.border },
+  staffOptionActive: { backgroundColor: C.primaryLight, borderColor: C.primaryMid },
+  staffOptionText: { flex: 1, color: C.textSecondary, fontSize: 13, fontWeight: '600' },
+  staffOptionTextActive: { color: C.primaryDark },
   scheduleGrid: { marginBottom: 2 },
 
-  dropdownButton: { backgroundColor: '#f3f5ff', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  dropdownText: { flex: 1, color: '#1f2540', fontSize: 15, paddingRight: 8 },
-  dropdownMenu: { backgroundColor: '#fff', borderRadius: 14, marginTop: 8, borderWidth: 1, borderColor: '#e6ebff', overflow: 'hidden' },
-  dropdownItem: { paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eef2ff' },
-  dropdownItemText: { color: '#243156', fontSize: 14 },
+  dropdownButton: { backgroundColor: C.bgMuted, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: C.border },
+  dropdownText: { flex: 1, color: C.textPrimary, fontSize: 15, paddingRight: 8 },
+  dropdownMenu: { backgroundColor: C.bgCard, borderRadius: 14, marginTop: 8, borderWidth: 1, borderColor: C.border, overflow: 'hidden' },
+  dropdownItem: { paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.borderLight },
+  dropdownItemText: { color: C.textPrimary, fontSize: 14 },
 
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
-  secondaryBtn: { minWidth: 96, borderWidth: 1, borderColor: '#cbd7ff', backgroundColor: '#f3f5ff', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
-  secondaryBtnText: { color: '#4f7cff', fontSize: 15, fontWeight: '800' },
-  submitBtn: { marginTop: 8, backgroundColor: '#4f7cff', borderRadius: 14, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7 },
+  secondaryBtn: { minWidth: 96, borderWidth: 1, borderColor: C.primaryMid, backgroundColor: C.primaryLight, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
+  secondaryBtnText: { color: C.primary, fontSize: 15, fontWeight: '700' },
+  submitBtn: { marginTop: 8, backgroundColor: C.primary, borderRadius: 16, paddingVertical: 15, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 7, shadowColor: C.primaryDark, shadowOpacity: 0.2, shadowRadius: 10, elevation: 4 },
   actionSubmitBtn: { flex: 1, marginTop: 0 },
   submitBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   btnDisabled: { opacity: 0.75 },
 
-  emptyText: { color: '#707995', fontSize: 13, padding: 12 },
-  error: { color: '#c94a59', marginTop: 4, marginBottom: 6, fontSize: 12 },
+  emptyText: { color: C.textMuted, fontSize: 13, padding: 12 },
+  error: { color: C.danger, marginTop: 4, marginBottom: 6, fontSize: 12 },
 
-  imagePicker: { borderRadius: 14, overflow: 'hidden', borderWidth: 1.5, borderColor: '#d0d8ff', borderStyle: 'dashed', backgroundColor: '#f3f5ff' },
+  imagePicker: { borderRadius: 16, overflow: 'hidden', borderWidth: 1.5, borderColor: C.primaryMid, borderStyle: 'dashed', backgroundColor: C.bgMuted },
   imagePlaceholder: { height: 110, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  imagePlaceholderText: { fontSize: 13, color: '#6b7aaa', fontWeight: '500' },
+  imagePlaceholderText: { fontSize: 13, color: C.textSecondary, fontWeight: '500' },
   imagePreview: { width: '100%', height: 160 },
-  removeImage: { position: 'absolute', top: 8, right: 8, backgroundColor: '#e05c6a', borderRadius: 12, padding: 4 }
+  removeImage: { position: 'absolute', top: 8, right: 8, backgroundColor: C.danger, borderRadius: 12, padding: 4 },
+
+  serviceGrid: { gap: 10, marginBottom: 14 },
+  guidanceCard: { backgroundColor: C.primaryLight, borderRadius: 16, padding: 12, marginBottom: 14, flexDirection: 'row', alignItems: 'center', gap: 9, borderWidth: 1, borderColor: C.primaryMid },
+  guidanceText: { flex: 1, color: C.primaryDark, fontSize: 12, fontWeight: '700', lineHeight: 18 },
+  serviceChoice: { backgroundColor: C.bgMuted, borderRadius: 18, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: C.border },
+  serviceChoiceActive: { backgroundColor: C.primary, borderColor: C.primary, shadowColor: C.primaryDark, shadowOpacity: 0.18, shadowRadius: 10, elevation: 4 },
+  serviceChoiceIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: C.primaryLight, alignItems: 'center', justifyContent: 'center' },
+  serviceChoiceIconActive: { backgroundColor: '#ffffff26' },
+  serviceChoiceText: { flex: 1, color: C.textPrimary, fontSize: 14, fontWeight: '700', lineHeight: 18 },
+  serviceChoiceTextActive: { color: '#ffffff' },
+  dayMode: { flexDirection: 'row', backgroundColor: C.primaryLight, borderRadius: 18, padding: 5, marginBottom: 16 },
+  dayModeButton: { flex: 1, alignItems: 'center', paddingVertical: 11, borderRadius: 14 },
+  dayModeActive: { backgroundColor: C.primary },
+  dayModeText: { color: C.textSecondary, fontSize: 14, fontWeight: '700' },
+  dayModeTextActive: { color: '#ffffff' }
 });

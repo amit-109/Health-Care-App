@@ -3,21 +3,51 @@ import { apiRequest } from './http';
 const normalizePhone = (value = '') => value.replace(/\D/g, '');
 const normalizePinCode = (value = '') => value.replace(/\D/g, '');
 
+const appendIfPresent = (params, key, value) => {
+  if (value !== undefined && value !== null) {
+    params.append(key, String(value));
+  }
+};
+
+const appendProfileImage = (formData, image) => {
+  if (!image) return;
+
+  if (typeof Blob !== 'undefined' && image instanceof Blob) {
+    formData.append('UserProfileImageUrl', image);
+    return;
+  }
+
+  if (typeof image === 'object' && image.uri) {
+    const name = image.name || image.fileName || image.uri.split('/').pop() || 'profile.jpg';
+    const type = image.mimeType || image.type || 'image/jpeg';
+
+    formData.append('UserProfileImageUrl', {
+      uri: image.uri,
+      name,
+      type
+    });
+  }
+};
+
 export async function registerUser(data) {
-  return apiRequest('/api/auth/register', {
+  const params = new URLSearchParams();
+  const formData = new FormData();
+
+  appendIfPresent(params, 'Name', data.name);
+  appendIfPresent(params, 'Email', data.email);
+  appendIfPresent(params, 'PhoneNumber', normalizePhone(data.phoneNumber));
+  appendIfPresent(params, 'PinCode', normalizePinCode(data.pinCode || data.pincode));
+  appendIfPresent(params, 'Password', data.password);
+  appendIfPresent(params, 'Address', data.address);
+  appendIfPresent(params, 'Landmark', data.landmark || '');
+  appendIfPresent(params, 'HouseNumber', data.houseNumber);
+  appendIfPresent(params, 'Role', data.role || 'patient');
+  appendIfPresent(params, 'Gender', data.gender);
+  appendProfileImage(formData, data.userProfileImageUrl || data.profileImage || data.profileImageFile);
+
+  return apiRequest(`/api/auth/register?${params.toString()}`, {
     method: 'POST',
-    body: JSON.stringify({
-      name: data.name,
-      email: data.email,
-      phoneNumber: normalizePhone(data.phoneNumber),
-      pinCode: normalizePinCode(data.pinCode || data.pincode),
-      password: data.password,
-      gender: data.gender,
-      address: data.address,
-      landmark: data.landmark,
-      houseNumber: data.houseNumber,
-      role: data.role || 'patient'
-    })
+    body: formData
   });
 }
 
