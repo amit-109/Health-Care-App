@@ -177,8 +177,8 @@ export default function HomeScreen({ user }) {
             <Text style={st.greeting}>{getHourGreeting()}, {firstName} 👋</Text>
             <Text style={st.heroDate}>{formatDate(new Date().toISOString())}</Text>
           </View>
-          {summary.profileImage
-            ? <Image source={{ uri: summary.profileImage }} style={st.avatar} />
+          {user?.profileImage || summary.profileImage
+            ? <Image source={{ uri: user?.profileImage || summary.profileImage }} style={st.avatar} />
             : <View style={st.avatarFallback}><Text style={st.avatarText}>{getInitials(patientName)}</Text></View>
           }
         </View>

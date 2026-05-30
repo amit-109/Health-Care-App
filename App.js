@@ -22,7 +22,8 @@ import {
   registerUser,
   sendLoginOtp,
   verifyLoginOtp,
-  verifySignupOtp
+  verifySignupOtp,
+  fetchUserProfile
 } from './src/api/auth';
 import { setAuthToken } from './src/api/http';
 
@@ -43,6 +44,8 @@ const createUserProfile = (user = {}, fallback = {}) => ({
   address: user.address || fallback.address || 'Not available',
   landmark: user.landmark || fallback.landmark || '',
   houseNumber: user.houseNumber || fallback.houseNumber || '',
+  pinCode: user.pinCode || user.pincode || user.PinCode || fallback.pinCode || fallback.pincode || '',
+  profileImage: user.profileImage || user.userProfileImageUrl || user.userProfileImage || fallback.profileImage || '',
   role: user.role || fallback.role || 'patient',
   token: user.token || fallback.token || '',
   lastVisit: user.lastVisit || fallback.lastVisit || '2026-04-05',
@@ -102,10 +105,24 @@ function AppContent() {
       });
       const apiUser = extractUser(payload) || {};
       const token = extractAuthToken(payload);
+      const userId = apiUser.id || apiUser.userId || apiUser.UserId;
       setAuthToken(token);
+
+      /* Fetch full profile to ensure all fields (including image) are canonical */
+      let profileData = apiUser;
+      if (userId) {
+        try {
+          const profilePayload = await fetchUserProfile(userId);
+          const fetchedUser = extractUser(profilePayload) || {};
+          profileData = { ...apiUser, ...fetchedUser };
+        } catch (e) {
+          /* fallback to login response if fetch fails */
+        }
+      }
+
       const resolvedUser = createUserProfile(
         {
-          ...apiUser,
+          ...profileData,
           token
         },
         {
@@ -181,10 +198,24 @@ function AppContent() {
         });
         const apiUser = extractUser(payload) || {};
         const token = extractAuthToken(payload);
+        const userId = apiUser.id || apiUser.userId || apiUser.UserId;
         setAuthToken(token);
+
+        /* Fetch full profile to ensure all fields are canonical */
+        let profileData = apiUser;
+        if (userId) {
+          try {
+            const profilePayload = await fetchUserProfile(userId);
+            const fetchedUser = extractUser(profilePayload) || {};
+            profileData = { ...apiUser, ...fetchedUser };
+          } catch (e) {
+            /* fallback to signup response if fetch fails */
+          }
+        }
+
         const resolvedUser = createUserProfile(
           {
-            ...apiUser,
+            ...profileData,
             token
           },
           pendingAuth.user
@@ -199,10 +230,24 @@ function AppContent() {
         });
         const apiUser = extractUser(payload) || {};
         const token = extractAuthToken(payload);
+        const userId = apiUser.id || apiUser.userId || apiUser.UserId;
         setAuthToken(token);
+
+        /* Fetch full profile to ensure all fields are canonical */
+        let profileData = apiUser;
+        if (userId) {
+          try {
+            const profilePayload = await fetchUserProfile(userId);
+            const fetchedUser = extractUser(profilePayload) || {};
+            profileData = { ...apiUser, ...fetchedUser };
+          } catch (e) {
+            /* fallback to login response if fetch fails */
+          }
+        }
+
         const resolvedUser = createUserProfile(
           {
-            ...apiUser,
+            ...profileData,
             token
           },
           {
@@ -247,6 +292,11 @@ function AppContent() {
 
   const handleAppointmentCreated = () => {
     showToast('Appointment booked successfully.', 'success');
+  };
+
+  const handleProfileUpdated = (updatedFields) => {
+    setUser((prev) => ({ ...prev, ...updatedFields }));
+    showToast('Profile updated successfully.', 'success');
   };
 
   const handleLogout = () => {
@@ -300,7 +350,7 @@ function AppContent() {
             />
             <Tab.Screen
               name="Profile"
-              children={() => <ProfileScreen user={user} onLogout={handleLogout} />}
+              children={() => <ProfileScreen user={user} onLogout={handleLogout} onProfileUpdated={handleProfileUpdated} />}
               options={{
                 tabBarIcon: ({ color }) => <AntDesign name="user" size={20} color={color} />
               }}

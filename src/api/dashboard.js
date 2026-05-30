@@ -10,7 +10,7 @@ const STATUS_LABELS = {
 };
 
 export async function getPatientDashboard() {
-  return apiRequest('/api/patient-dashboard', {
+  return apiRequest('/patient-dashboard', {
     method: 'GET'
   });
 }

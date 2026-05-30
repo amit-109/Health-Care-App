@@ -22,7 +22,7 @@ const appendFormValue = (formData, key, value) => {
 };
 
 export async function getServices() {
-  return apiRequest('/api/Service', {
+  return apiRequest('/Service', {
     method: 'GET'
   });
 }
@@ -33,7 +33,7 @@ export async function getAvailableStaff(date, slot) {
     slot
   });
 
-  return apiRequest(`/api/staff/available?${params.toString()}`, {
+  return apiRequest(`/staff/available?${params.toString()}`, {
     method: 'GET'
   });
 }
@@ -51,6 +51,7 @@ export async function createPatientAppointment(data) {
   appendFormValue(formData, 'DoctorPrescription', data.doctorPrescription);
   appendFormValue(formData, 'Latitude', data.latitude);
   appendFormValue(formData, 'Longitude', data.longitude);
+  appendFormValue(formData, 'AppointmentAddress', data.appointmentAddress);
   appendFormValue(formData, 'StaffId', String(data.staffId ?? 0));
 
   if (data.diseaseImage?.uri) {
@@ -69,7 +70,7 @@ export async function createPatientAppointment(data) {
     });
   }
 
-  return apiRequest('/api/patient', {
+  return apiRequest('/patient', {
     method: 'POST',
     headers: {
       Accept: '*/*'
@@ -79,7 +80,7 @@ export async function createPatientAppointment(data) {
 }
 
 export async function getPatientAppointmentsByUser(userId) {
-  return apiRequest(`/api/patient/user/${userId}`, { method: 'GET' });
+  return apiRequest(`/patient/user/${userId}`, { method: 'GET' });
 }
 
 export function extractAppointments(payload) {

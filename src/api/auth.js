@@ -29,6 +29,28 @@ const appendProfileImage = (formData, image) => {
   }
 };
 
+export async function updateUserProfile(id, data) {
+  const params = new URLSearchParams();
+  const formData = new FormData();
+
+  appendIfPresent(params, 'Name', data.name);
+  appendIfPresent(params, 'Email', data.email);
+  appendIfPresent(params, 'PhoneNumber', normalizePhone(data.phoneNumber || data.phone || ''));
+  appendIfPresent(params, 'Address', data.address);
+  appendIfPresent(params, 'Landmark', data.landmark || '');
+  appendIfPresent(params, 'HouseNumber', data.houseNumber);
+  appendIfPresent(params, 'PinCode', normalizePinCode(data.pinCode || data.pincode || ''));
+  appendIfPresent(params, 'Gender', data.gender);
+  appendIfPresent(params, 'Email', data.email);
+  if (data.isActive !== undefined) appendIfPresent(params, 'IsActive', data.isActive);
+  appendProfileImage(formData, data.userProfileImageUrl || data.profileImage);
+
+  return apiRequest(`/api/users/${id}?${params.toString()}`, {
+    method: 'PUT',
+    body: formData
+  });
+}
+
 export async function registerUser(data) {
   const params = new URLSearchParams();
   const formData = new FormData();
@@ -45,14 +67,14 @@ export async function registerUser(data) {
   appendIfPresent(params, 'Gender', data.gender);
   appendProfileImage(formData, data.userProfileImageUrl || data.profileImage || data.profileImageFile);
 
-  return apiRequest(`/api/auth/register?${params.toString()}`, {
+  return apiRequest(`/auth/register?${params.toString()}`, {
     method: 'POST',
     body: formData
   });
 }
 
 export async function loginWithPassword({ emailOrPhone, password }) {
-  return apiRequest('/api/auth/login', {
+  return apiRequest('/auth/login', {
     method: 'POST',
     body: JSON.stringify({
       emailOrPhone: emailOrPhone.includes('@') ? emailOrPhone.trim().toLowerCase() : normalizePhone(emailOrPhone),
@@ -62,7 +84,7 @@ export async function loginWithPassword({ emailOrPhone, password }) {
 }
 
 export async function sendLoginOtp({ phoneNumber }) {
-  return apiRequest('/api/auth/login/send-otp', {
+  return apiRequest('/auth/login/send-otp', {
     method: 'POST',
     body: JSON.stringify({
       phoneNumber: normalizePhone(phoneNumber)
@@ -71,7 +93,7 @@ export async function sendLoginOtp({ phoneNumber }) {
 }
 
 export async function verifyLoginOtp({ phoneNumber, otp }) {
-  return apiRequest('/api/auth/login/verify-otp', {
+  return apiRequest('/auth/login/verify-otp', {
     method: 'POST',
     body: JSON.stringify({
       phoneNumber: normalizePhone(phoneNumber),
@@ -81,12 +103,18 @@ export async function verifyLoginOtp({ phoneNumber, otp }) {
 }
 
 export async function verifySignupOtp({ phoneNumber, otp }) {
-  return apiRequest('/api/auth/verify-otp', {
+  return apiRequest('/auth/verify-otp', {
     method: 'POST',
     body: JSON.stringify({
       phoneNumber: normalizePhone(phoneNumber),
       otp: otp.trim()
     })
+  });
+}
+
+export async function fetchUserProfile(userId) {
+  return apiRequest(`/api/users/${userId}`, {
+    method: 'GET'
   });
 }
 

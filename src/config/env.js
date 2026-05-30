@@ -1,6 +1,15 @@
-const DEFAULT_API_BASE_URL = 'https://patientbookingsystem.onrender.com';
-const configuredApiBaseUrl = (process.env.EXPO_PUBLIC_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/+$/, '');
+import Constants from 'expo-constants';
 
-export const API_BASE_URL = /:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(configuredApiBaseUrl)
-  ? DEFAULT_API_BASE_URL
-  : configuredApiBaseUrl;
+const env = (Constants.expoConfig && Constants.expoConfig.extra) || (Constants.manifest && Constants.manifest.extra) || {};
+const rawApiUrl = env.EXPO_PUBLIC_API_BASE_URL || '';
+let configuredApiBaseUrl = rawApiUrl;
+while (configuredApiBaseUrl.endsWith('/')) {
+  configuredApiBaseUrl = configuredApiBaseUrl.slice(0, -1);
+}
+
+if (!configuredApiBaseUrl) {
+  throw new Error('EXPO_PUBLIC_API_BASE_URL is required in your .env file and must be exposed via app.config.js.');
+}
+
+export const API_BASE_URL = configuredApiBaseUrl;
+console.log('[API CONFIG] API_BASE_URL =', API_BASE_URL);
