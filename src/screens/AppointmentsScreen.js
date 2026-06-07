@@ -16,6 +16,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { C } from '../config/theme';
+import { normalizeImageUri } from '../config/env';
 import * as Location from 'expo-location';
 import {
   createPatientAppointment,
@@ -809,7 +810,7 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
                 const title = s.serviceName || s.name || s.ServiceName || `Service #${sid}`;
                 const category = s.category || s.categoryName || s.type || 'Care';
                 const selected = String(selectedServiceId) === sid;
-                const svcImage = s.image || s.serviceImage || s.imageUrl || s.iconUrl;
+                const svcImage = normalizeImageUri(s.image || s.serviceImage || s.imageUrl || s.iconUrl);
 
                 return (
                   <TouchableOpacity
@@ -819,7 +820,12 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
                     disabled={loading}
                   >
                     {svcImage ? (
-                      <Image source={{ uri: svcImage }} style={styles.serviceImage} resizeMode="cover" />
+                      <Image
+                        source={{ uri: svcImage }}
+                        style={styles.serviceImage}
+                        resizeMode="cover"
+                        onError={({ nativeEvent }) => console.warn('AppointmentsScreen service image failed', svcImage, nativeEvent)}
+                      />
                     ) : (
                       <View style={styles.serviceFallback}>
                         <MaterialIcons name="medical-services" size={26} color={C.primary} />

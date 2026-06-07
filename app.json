@@ -1,8 +1,10 @@
 {
+  "$schema": "./.vscode/app-schema.json",
   "expo": {
     "name": "Home Care Nursing Services",
     "slug": "health-care-patient-app",
     "version": "1.0.0",
+    "sdkVersion": "55.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "icon": "./assets/careslot-logo.png",
@@ -34,7 +36,11 @@
     "extra": {
       "eas": {
         "projectId": "7d1a185d-c3e3-422a-81dc-858001432ea4"
-      }
+      },
+      "EXPO_PUBLIC_API_BASE_URL": "https://api.homecarenursing.cloud/api"
+    },
+    "cli": {
+      "appVersionSource": "app.json"
     },
     "plugins": [
       "expo-font",

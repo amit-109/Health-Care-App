@@ -7,9 +7,34 @@ while (configuredApiBaseUrl.endsWith('/')) {
   configuredApiBaseUrl = configuredApiBaseUrl.slice(0, -1);
 }
 
+// Use a default or warn if not configured
 if (!configuredApiBaseUrl) {
-  throw new Error('EXPO_PUBLIC_API_BASE_URL is required in your .env file and must be exposed via app.config.js.');
+  console.warn('[ENV WARNING] EXPO_PUBLIC_API_BASE_URL is not configured. API requests will fail. Set it in .env or EAS build environment.');
+  configuredApiBaseUrl = 'https://api.homecarenursing.cloud/api';
 }
 
 export const API_BASE_URL = configuredApiBaseUrl;
-console.log('[API CONFIG] API_BASE_URL =', API_BASE_URL);
+
+export function normalizeImageUri(uri) {
+  if (!uri) return null;
+  const value = typeof uri === 'object' && uri.uri ? uri.uri : String(uri).trim();
+  if (!value) return null;
+
+  if (/^http:\/\//i.test(value)) {
+    return `https://${value.slice(7)}`;
+  }
+  if (/^\/\//.test(value)) {
+    return `https:${value}`;
+  }
+  if (/^https?:\/\//i.test(value)) {
+    return value;
+  }
+  if (value.startsWith('/')) {
+    return `${API_BASE_URL}${value}`;
+  }
+  return `${API_BASE_URL}/${value}`;
+}
+
+console.log('[API CONFIG] EXPO_PUBLIC_API_BASE_URL from extra:', env.EXPO_PUBLIC_API_BASE_URL);
+console.log('[API CONFIG] Configured API_BASE_URL:', API_BASE_URL);
+console.log('[API CONFIG] Using normalizeImageUri to resolve image URIs');

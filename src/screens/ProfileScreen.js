@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { C } from '../config/theme';
 import { updateUserProfile } from '../api/auth';
+import { normalizeImageUri } from '../config/env';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -153,8 +154,8 @@ export default function ProfileScreen({ user, onLogout, onProfileUpdated }) {
         <View style={s.banner}>
           <View style={s.bannerTop}>
             <View style={s.avatarWrap}>
-              {user.profileImage
-                ? <Image source={{ uri: user.profileImage }} style={s.avatarImg} />
+              {normalizeImageUri(user.profileImage)
+                ? <Image source={{ uri: normalizeImageUri(user.profileImage) }} style={s.avatarImg} />
                 : <Text style={s.avatarText}>{getInitials(user.name)}</Text>
               }
             </View>
@@ -253,9 +254,17 @@ export default function ProfileScreen({ user, onLogout, onProfileUpdated }) {
       <View style={s.avatarPickerCard}>
         <TouchableOpacity style={s.avatarPickerWrap} onPress={pickImage}>
           {profileImage
-            ? <Image source={{ uri: profileImage.uri }} style={s.avatarPickerImg} />
-            : user.profileImage
-              ? <Image source={{ uri: user.profileImage }} style={s.avatarPickerImg} />
+            ? <Image
+                source={{ uri: profileImage.uri }}
+                style={s.avatarPickerImg}
+                onError={({ nativeEvent }) => console.warn('ProfileScreen picked image failed', profileImage.uri, nativeEvent)}
+              />
+            : normalizeImageUri(user.profileImage)
+              ? <Image
+                  source={{ uri: normalizeImageUri(user.profileImage) }}
+                  style={s.avatarPickerImg}
+                  onError={({ nativeEvent }) => console.warn('ProfileScreen stored profile image failed', normalizeImageUri(user.profileImage), nativeEvent)}
+                />
               : <View style={s.avatarPickerFallback}>
                   <Text style={s.avatarPickerInitials}>{getInitials(name || user.name)}</Text>
                 </View>

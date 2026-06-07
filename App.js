@@ -26,6 +26,7 @@ import {
   fetchUserProfile
 } from './src/api/auth';
 import { setAuthToken } from './src/api/http';
+import { normalizeImageUri } from './src/config/env';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -45,7 +46,7 @@ const createUserProfile = (user = {}, fallback = {}) => ({
   landmark: user.landmark || fallback.landmark || '',
   houseNumber: user.houseNumber || fallback.houseNumber || '',
   pinCode: user.pinCode || user.pincode || user.PinCode || fallback.pinCode || fallback.pincode || '',
-  profileImage: user.profileImage || user.userProfileImageUrl || user.userProfileImage || fallback.profileImage || '',
+  profileImage: normalizeImageUri(user.profileImage || user.userProfileImageUrl || user.userProfileImage || fallback.profileImage || '') || '',
   role: user.role || fallback.role || 'patient',
   token: user.token || fallback.token || '',
   lastVisit: user.lastVisit || fallback.lastVisit || '2026-04-05',

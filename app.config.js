@@ -19,10 +19,11 @@ function parseEnvFile(filePath) {
 
 const envPath = path.resolve(__dirname, '.env');
 const env = parseEnvFile(envPath);
-const apiUrl = env.EXPO_PUBLIC_API_BASE_URL;
+const appJsonApiUrl = appJson?.expo?.extra?.EXPO_PUBLIC_API_BASE_URL || '';
+const apiUrl = env.EXPO_PUBLIC_API_BASE_URL || process.env.EXPO_PUBLIC_API_BASE_URL || appJsonApiUrl || '';
 
 if (!apiUrl) {
-  throw new Error('EXPO_PUBLIC_API_BASE_URL is required in .env');
+  console.warn('Warning: EXPO_PUBLIC_API_BASE_URL is not configured. Using fallback.');
 }
 
 module.exports = {
@@ -31,7 +32,7 @@ module.exports = {
     ...appJson.expo,
     extra: {
       ...((appJson.expo && appJson.expo.extra) || {}),
-      EXPO_PUBLIC_API_BASE_URL: apiUrl
+      EXPO_PUBLIC_API_BASE_URL: apiUrl || appJsonApiUrl
     }
   }
 };

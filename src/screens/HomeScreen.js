@@ -6,6 +6,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { extractPatientDashboard, getAppointmentStatusLabel, getPatientDashboard } from '../api/dashboard';
 import { C } from '../config/theme';
+import { normalizeImageUri } from '../config/env';
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -28,7 +29,7 @@ const getInitials = (name = 'P') =>
 
 const getServiceName = (s) => s.name || s.serviceName || s.ServiceName || 'Health Service';
 const getStaffName   = (s) => s.name || s.fullName || s.staffName || 'Care Specialist';
-const getStaffImage  = (s) => s.image || s.profileImage || null;
+const getStaffImage  = (s) => normalizeImageUri(s.image || s.profileImage || s.imageUrl || s.profileImageUrl || null);
 const getStaffSpec   = (s) => s.specialization || s.Specialization || s.role || 'Specialist';
 
 const STATUS_META = {
@@ -177,10 +178,20 @@ export default function HomeScreen({ user }) {
             <Text style={st.greeting}>{getHourGreeting()}, {firstName} 👋</Text>
             <Text style={st.heroDate}>{formatDate(new Date().toISOString())}</Text>
           </View>
-          {user?.profileImage || summary.profileImage
-            ? <Image source={{ uri: user?.profileImage || summary.profileImage }} style={st.avatar} />
+          {normalizeImageUri(user?.profileImage || summary.profileImage)
+            ? <Image
+                source={{ uri: normalizeImageUri(user?.profileImage || summary.profileImage) }}
+                style={st.avatar}
+                onError={({ nativeEvent }) => console.warn('HomeScreen avatar image failed', normalizeImageUri(user?.profileImage || summary.profileImage), nativeEvent)}
+              />
             : <View style={st.avatarFallback}><Text style={st.avatarText}>{getInitials(patientName)}</Text></View>
           }
+          {/* Dev-only: show resolved avatar URI for debugging */}
+          {__DEV__ && (
+            <Text style={{ color: C.textMuted, fontSize: 11, marginTop: 6 }} numberOfLines={2} ellipsizeMode="middle">
+              {`avatar: ${String(normalizeImageUri(user?.profileImage || summary.profileImage) || '')}`}
+            </Text>
+          )}
         </View>
 
         <View style={st.heroStrip}>
@@ -238,16 +249,23 @@ export default function HomeScreen({ user }) {
       <Section title="Our Services" sub={`${services.length} available`} />
       {services.length ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.hList}>
-          {services.map((s, i) => (
-            <View key={s.id || i} style={st.serviceCard}>
-              {s.image
-                ? <Image source={{ uri: s.image }} style={st.serviceImg} />
-                : <View style={st.serviceFallback}><MaterialIcons name="medical-services" size={26} color={C.primary} /></View>
-              }
-              <Text style={st.serviceName} numberOfLines={2}>{getServiceName(s)}</Text>
-              <Text style={st.serviceCat} numberOfLines={1}>{s.category || s.categoryName || 'Care'}</Text>
-            </View>
-          ))}
+          {services.map((s, i) => {
+            const serviceImage = normalizeImageUri(s.image || s.serviceImage || s.imageUrl || s.iconUrl);
+            return (
+              <View key={s.id || i} style={st.serviceCard}>
+                {serviceImage
+                  ? <Image
+                      source={{ uri: serviceImage }}
+                      style={st.serviceImg}
+                      onError={({ nativeEvent }) => console.warn('HomeScreen service image failed', serviceImage, nativeEvent)}
+                    />
+                  : <View style={st.serviceFallback}><MaterialIcons name="medical-services" size={26} color={C.primary} /></View>
+                }
+                <Text style={st.serviceName} numberOfLines={2}>{getServiceName(s)}</Text>
+                <Text style={st.serviceCat} numberOfLines={1}>{s.category || s.categoryName || 'Care'}</Text>
+              </View>
+            );
+          })}
         </ScrollView>
       ) : (
         <View style={st.emptyRow}>
@@ -263,7 +281,11 @@ export default function HomeScreen({ user }) {
           {staffs.slice(0, 10).map((s, i) => (
             <View key={s.id || i} style={st.staffCard}>
               {getStaffImage(s)
-                ? <Image source={{ uri: getStaffImage(s) }} style={st.staffImg} />
+                ? <Image
+                    source={{ uri: getStaffImage(s) }}
+                    style={st.staffImg}
+                    onError={({ nativeEvent }) => console.warn('HomeScreen staff image failed', getStaffImage(s), nativeEvent)}
+                  />
                 : <View style={st.staffAvatar}><Text style={st.staffAvatarText}>{getInitials(getStaffName(s))}</Text></View>
               }
               <View style={st.staffOnline} />
