@@ -13,6 +13,7 @@ import {
   useWindowDimensions
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { C } from '../config/theme';
 
@@ -151,9 +152,10 @@ export default function SignupScreen({ navigation, onRegister }) {
   };
 
   return (
-    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <ScrollView contentContainerStyle={[s.inner, compact && s.innerCompact]} keyboardShouldPersistTaps="handled">
-        <View style={[s.card, compact && s.cardCompact]}>
+    <LinearGradient colors={['#0f766e', '#0d9488']} start={[0, 0]} end={[1, 1]} style={s.gradient}>
+      <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView contentContainerStyle={[s.inner, compact && s.innerCompact]} keyboardShouldPersistTaps="handled">
+          <View style={[s.card, compact && s.cardCompact]}>
           <Text style={[s.title, compact && s.titleCompact]}>Create Account</Text>
           <Text style={s.subtitle}>Fill in your details to get started.</Text>
 
@@ -336,11 +338,13 @@ export default function SignupScreen({ navigation, onRegister }) {
           </View>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </LinearGradient>
   );
 }
 
 const s = StyleSheet.create({
+  gradient: { flex: 1 },
   container: { flex: 1, backgroundColor: C.primary },
   inner: { padding: 18, flexGrow: 1, justifyContent: 'center' },
   innerCompact: { padding: 14 },

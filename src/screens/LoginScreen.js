@@ -12,6 +12,7 @@ import {
   useWindowDimensions
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { C } from '../config/theme';
 
 export default function LoginScreen({ navigation, onPasswordLogin, onOtpLogin }) {
@@ -62,9 +63,10 @@ export default function LoginScreen({ navigation, onPasswordLogin, onOtpLogin })
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
-      <ScrollView contentContainerStyle={[styles.scrollContent, compact && styles.scrollContentCompact]} keyboardShouldPersistTaps="handled">
-        <View style={[styles.card, compact && styles.cardCompact]}>
+    <LinearGradient colors={['#0f766e', '#0d9488']} start={[0, 0]} end={[1, 1]} style={styles.gradient}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
+        <ScrollView contentContainerStyle={[styles.scrollContent, compact && styles.scrollContentCompact]} keyboardShouldPersistTaps="handled">
+          <View style={[styles.card, compact && styles.cardCompact]}>
           <Text style={[styles.title, compact && styles.titleCompact]}>Patient Sign In</Text>
           <Text style={[styles.subtitle, compact && styles.subtitleCompact]}>Login with password or receive OTP on your phone.</Text>
 
@@ -138,12 +140,14 @@ export default function LoginScreen({ navigation, onPasswordLogin, onOtpLogin })
           </View>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container:            { flex: 1, backgroundColor: C.primary },
+  gradient:             { flex: 1 },
+  container:            { flex: 1, backgroundColor: 'transparent' },
   scrollContent:        { flexGrow: 1, justifyContent: 'center', padding: 18 },
   scrollContentCompact: { padding: 14 },
   card:        { backgroundColor: C.bgCard, borderRadius: 26, padding: 22, shadowColor: C.primaryDark, shadowOpacity: 0.2, shadowRadius: 22, elevation: 10, borderWidth: 1, borderColor: C.border },

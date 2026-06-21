@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Image,
   Platform,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -162,7 +161,7 @@ const formatAppointmentCard = (booking, serviceLabel) => {
   };
 };
 
-function DateField({ label, value, onChange, disabled }) {
+function DateField({ label, value, onChange, disabled, allowPast = false }) {
   const [showIosPicker, setShowIosPicker] = useState(false);
   const minimumDate = new Date();
   minimumDate.setHours(0, 0, 0, 0);
@@ -171,14 +170,17 @@ function DateField({ label, value, onChange, disabled }) {
     if (disabled) return;
 
     if (Platform.OS === 'android') {
-      DateTimePickerAndroid.open({
+      const options = {
         value: parseDateValue(value),
         mode: 'date',
-        minimumDate,
         onChange: (_, selectedDate) => {
           if (selectedDate) onChange(toIso(selectedDate));
         }
-      });
+      };
+
+      if (!allowPast) options.minimumDate = minimumDate;
+
+      DateTimePickerAndroid.open(options);
       return;
     }
 
@@ -201,7 +203,7 @@ function DateField({ label, value, onChange, disabled }) {
             value={parseDateValue(value)}
             mode="date"
             display="spinner"
-            minimumDate={minimumDate}
+            {...(!allowPast ? { minimumDate } : {})}
             onChange={(_, selectedDate) => {
               if (selectedDate) onChange(toIso(selectedDate));
             }}
@@ -263,19 +265,29 @@ function TimeField({ label, value, onChange, disabled }) {
   );
 }
 
-export default function AppointmentsScreen({ user, onAppointmentCreated }) {
+export default function AppointmentsScreen({ user, onAppointmentCreated, initialServiceType, initialTab }) {
   const { width } = useWindowDimensions();
   const compact = width < 380;
 
-  const [view, setView] = useState('list');
+  const [view, setView] = useState(initialTab === 'form' && initialServiceType ? 'form' : 'list');
   const [formTab, setFormTab] = useState(0);
   const [appointments, setAppointments] = useState([]);
   const [apptLoading, setApptLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [services, setServices] = useState([]);
   const [servicesLoading, setServicesLoading] = useState(true);
-  const [serviceType, setServiceType] = useState('day');
+  const [serviceType, setServiceType] = useState(initialServiceType || 'day');
   const [loading, setLoading] = useState(false);
+  const isMounted = useRef(false);
+
+  useEffect(() => {
+    if (!isMounted.current) { isMounted.current = true; return; }
+    if (initialServiceType) {
+      setServiceType(initialServiceType);
+      setView('form');
+      setFormTab(0);
+    }
+  }, [initialServiceType]);
   const [error, setError] = useState('');
   const [serviceMenuOpen, setServiceMenuOpen] = useState(false);
   const [selectedServiceId, setSelectedServiceId] = useState('');
@@ -298,6 +310,7 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
   const [availableStaff, setAvailableStaff] = useState([]);
   const [availableStaffLoading, setAvailableStaffLoading] = useState(false);
   const [availableStaffError, setAvailableStaffError] = useState('');
+  const [staffMenuOpen, setStaffMenuOpen] = useState(false);
   const [diseaseImage, setDiseaseImage] = useState(null);
 
   const loadAll = useCallback(async (silent = false) => {
@@ -371,8 +384,8 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
             return current;
           }
 
-          const firstAvailableId = getStaffId(staff[0]);
-          return firstAvailableId ? String(firstAvailableId) : '0';
+          // Do not auto-select the first available staff; keep selection optional.
+          return '0';
         });
       })
       .catch((e) => {
@@ -570,16 +583,6 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
       return;
     }
 
-    if (availableStaffLoading) {
-      setError('Please wait while available staff is loading.');
-      return;
-    }
-
-    if (!availableStaff.length || !Number(staffId)) {
-      setError('Please select an available staff member for this slot.');
-      return;
-    }
-
     const slotTime = buildSlotTimeRange(startTime.trim(), endTime.trim());
 
     setLoading(true);
@@ -621,7 +624,6 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
         style={styles.page}
         contentContainerStyle={[styles.content, compact && styles.contentCompact]}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#1c35ff" colors={['#1c35ff']} />}
       >
         <View style={styles.listHeader}>
           <Text style={[styles.title, compact && styles.titleCompact]}>My Appointments</Text>
@@ -674,7 +676,7 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
     );
   }
 
-  const TABS = ['Service Type','Services','Reason','Images','Location','Date','Time','Discharge Date','No. of Days','Confirm Booking'];
+  const TABS = ['Service Type', 'Services', 'Prescription & Comments', 'Location', 'Date & Time', 'Confirm'];
 
   const handleNext = () => {
     setError('');
@@ -699,64 +701,21 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
       return;
     }
 
-    // Step 2: Reason
-    if (formTab === 2) {
-      if (!diseaseName.trim()) {
-        setError('Please enter the reason for care.');
-        return;
-      }
-      setFormTab(3);
-      return;
-    }
+    // Step 2: Prescription & Comments (optional)
+    if (formTab === 2) { setFormTab(3); return; }
 
-    // Step 3: Images (optional)
-    if (formTab === 3) {
-      setFormTab(4);
-      return;
-    }
+    // Step 3: Location (optional)
+    if (formTab === 3) { setFormTab(4); return; }
 
-    // Step 4: Location (optional)
+    // Step 4: Date & Time
     if (formTab === 4) {
+      if (!appointmentDate.trim()) { setError('Please select an appointment date.'); return; }
+      if (!validateTimeRange()) return;
       setFormTab(5);
       return;
     }
 
-    // Step 5: Date
-    if (formTab === 5) {
-      if (!appointmentDate.trim()) {
-        setError('Please select an appointment date.');
-        return;
-      }
-      setFormTab(6);
-      return;
-    }
-
-    // Step 6: Time
-    if (formTab === 6) {
-      if (!validateTimeRange()) {
-        return;
-      }
-      setFormTab(7);
-      return;
-    }
-
-    // Step 7: Discharge Date (optional)
-    if (formTab === 7) {
-      setFormTab(8);
-      return;
-    }
-
-    // Step 8: No. of Days
-    if (formTab === 8) {
-      if (!noOfDays || Number(noOfDays) <= 0) {
-        setError('Please enter a valid number of days.');
-        return;
-      }
-      setFormTab(9);
-      return;
-    }
-
-    // Step 9: Confirm Booking (final)
+    // Step 5: Confirm Booking (final)
   };
 
   const renderStepContent = () => {
@@ -849,69 +808,56 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
     if (formTab === 2) {
       return (
         <>
-          <Text style={styles.serviceSelectionHeading}>Tell us why</Text>
-          <Text style={styles.serviceSelectionHint}>Describe why you need this service.</Text>
+          <Text style={styles.serviceSelectionHeading}>Prescription & Comments</Text>
+          <Text style={styles.serviceSelectionHint}>Upload your prescription image and add any comments.</Text>
+          {/* Prescription image */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Reason *</Text>
+            <Text style={styles.label}>Prescription Image (optional)</Text>
+            <TouchableOpacity style={styles.imagePicker} onPress={() => pickImage(setDoctorPrescriptionImage, 'prescription.jpg')} disabled={loading}>
+              {doctorPrescriptionImage
+                ? <Image source={{ uri: doctorPrescriptionImage.uri }} style={styles.imagePreview} resizeMode="cover" />
+                : <View style={styles.imagePlaceholder}>
+                    <MaterialIcons name="add-photo-alternate" size={28} color={C.primary} />
+                    <Text style={styles.imagePlaceholderText}>Tap to upload prescription</Text>
+                  </View>
+              }
+            </TouchableOpacity>
+            {doctorPrescriptionImage
+              ? <TouchableOpacity style={styles.removeImage} onPress={() => setDoctorPrescriptionImage(null)}>
+                  <MaterialIcons name="close" size={14} color="#fff" />
+                </TouchableOpacity>
+              : null}
+          </View>
+          {/* Comments — merged below prescription image */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Comments (optional)</Text>
             <TextInput
               style={[styles.input, styles.multilineInput]}
-              placeholder="Describe the care reason"
+              placeholder="Add any comments or care notes…"
               value={diseaseName}
               onChangeText={setDiseaseName}
               editable={!loading}
               multiline
             />
           </View>
+          {/* Disease image — hidden from UI */}
+          {/* <View style={styles.inputGroup}>
+            <Text style={styles.label}>Disease Image (optional)</Text>
+            <TouchableOpacity style={styles.imagePicker} onPress={() => pickImage(setDiseaseImage, 'disease-image.jpg')} disabled={loading}>
+              {diseaseImage
+                ? <Image source={{ uri: diseaseImage.uri }} style={styles.imagePreview} resizeMode="cover" />
+                : <View style={styles.imagePlaceholder}>
+                    <MaterialIcons name="add-a-photo" size={28} color={C.primary} />
+                    <Text style={styles.imagePlaceholderText}>Tap to upload image</Text>
+                  </View>
+              }
+            </TouchableOpacity>
+          </View> */}
         </>
       );
     }
 
     if (formTab === 3) {
-      return (
-        <>
-          <Text style={styles.serviceSelectionHeading}>Add images</Text>
-          <Text style={styles.serviceSelectionHint}>Upload illness or prescription images.</Text>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Disease Image (optional)</Text>
-            <TouchableOpacity style={styles.imagePicker} onPress={() => pickImage(setDiseaseImage, 'disease-image.jpg')} disabled={loading}>
-              {diseaseImage ? (
-                <Image source={{ uri: diseaseImage.uri }} style={styles.imagePreview} resizeMode="cover" />
-              ) : (
-                <View style={styles.imagePlaceholder}>
-                  <MaterialIcons name="add-a-photo" size={28} color="#4f7cff" />
-                  <Text style={styles.imagePlaceholderText}>Tap to upload image</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-            {diseaseImage ? (
-              <TouchableOpacity style={styles.removeImage} onPress={() => setDiseaseImage(null)}>
-                <MaterialIcons name="close" size={14} color="#fff" />
-              </TouchableOpacity>
-            ) : null}
-          </View>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Prescription Image (optional)</Text>
-            <TouchableOpacity style={styles.imagePicker} onPress={() => pickImage(setDoctorPrescriptionImage, 'doctor-prescription-image.jpg')} disabled={loading}>
-              {doctorPrescriptionImage ? (
-                <Image source={{ uri: doctorPrescriptionImage.uri }} style={styles.imagePreview} resizeMode="cover" />
-              ) : (
-                <View style={styles.imagePlaceholder}>
-                  <MaterialIcons name="add-photo-alternate" size={28} color="#4f7cff" />
-                  <Text style={styles.imagePlaceholderText}>Tap to upload prescription</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-            {doctorPrescriptionImage ? (
-              <TouchableOpacity style={styles.removeImage} onPress={() => setDoctorPrescriptionImage(null)}>
-                <MaterialIcons name="close" size={14} color="#fff" />
-              </TouchableOpacity>
-            ) : null}
-          </View>
-        </>
-      );
-    }
-
-    if (formTab === 4) {
       return (
         <>
           <Text style={styles.serviceSelectionHeading}>Pick location</Text>
@@ -990,52 +936,42 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
       );
     }
 
-    if (formTab === 5) {
+    if (formTab === 4) {
       return (
         <>
-          <Text style={styles.serviceSelectionHeading}>Pick appointment date</Text>
-          <Text style={styles.serviceSelectionHint}>Choose when the care service should begin.</Text>
+          <Text style={styles.serviceSelectionHeading}>Date & Time</Text>
+          <Text style={styles.serviceSelectionHint}>Choose your appointment date, start and end time.</Text>
+          <View style={styles.dayMode}>
+            <TouchableOpacity style={[styles.dayModeButton, serviceType === 'day' && styles.dayModeActive]} disabled>
+              <Text style={[styles.dayModeText, serviceType === 'day' && styles.dayModeTextActive]}>Single Day</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.dayModeButton, serviceType === 'full' && styles.dayModeActive]} disabled>
+              <Text style={[styles.dayModeText, serviceType === 'full' && styles.dayModeTextActive]}>Multiple Days</Text>
+            </TouchableOpacity>
+          </View>
           <DateField label="Appointment Date *" value={appointmentDate} onChange={handleAppointmentDateChange} disabled={loading} />
-        </>
-      );
-    }
-
-    if (formTab === 6) {
-      return (
-        <>
-          <Text style={styles.serviceSelectionHeading}>Pick appointment time</Text>
-          <Text style={styles.serviceSelectionHint}>Choose start and end time for the visit.</Text>
           <TimeField label="Start Time *" value={startTime} onChange={setStartTime} disabled={loading} />
           <TimeField label="End Time *" value={endTime} onChange={setEndTime} disabled={loading} />
           {startTime && endTime ? (
             <View style={styles.rangeSummary}>
-              <MaterialIcons name="schedule" size={16} color="#4f7cff" />
+              <MaterialIcons name="schedule" size={16} color={C.primary} />
               <Text style={styles.rangeSummaryText}>{buildSlotTimeRange(startTime, endTime)}</Text>
             </View>
           ) : null}
-        </>
-      );
-    }
-
-    if (formTab === 7) {
-      return (
-        <>
-          <Text style={styles.serviceSelectionHeading}>Discharge date</Text>
-          <Text style={styles.serviceSelectionHint}>When should the service end?</Text>
-          <DateField label="Discharge Date" value={dischargeDate} onChange={setDischargeDate} disabled={loading} />
-        </>
-      );
-    }
-
-    if (formTab === 8) {
-      return (
-        <>
-          <Text style={styles.serviceSelectionHeading}>Duration</Text>
-          <Text style={styles.serviceSelectionHint}>How many days do you need support?</Text>
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>No. of Days</Text>
-            <TextInput style={styles.input} placeholder="1" value={noOfDays} onChangeText={setNoOfDays} editable={!loading} keyboardType="numeric" />
+            <Text style={styles.label}>{serviceType === 'day' ? 'No. of Days (Day Care = 1)' : 'No. of Days'}</Text>
+            <TextInput
+              style={[styles.input, serviceType === 'day' && { opacity: 0.55 }]}
+              placeholder="1"
+              value={noOfDays}
+              onChangeText={serviceType === 'full' ? setNoOfDays : undefined}
+              editable={!loading && serviceType === 'full'}
+              keyboardType="numeric"
+            />
           </View>
+          {/* Discharge Date — hidden from UI */}
+          {/* <DateField label="Discharge Date" value={dischargeDate} onChange={setDischargeDate} disabled={loading} /> */}
+          {/* Staff selection — hidden from UI */}
         </>
       );
     }
@@ -1043,13 +979,13 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
     return (
       <>
         <Text style={styles.serviceSelectionHeading}>Confirm booking</Text>
-        <Text style={styles.serviceSelectionHint}>Review your details and submit the appointment.</Text>
+        <Text style={styles.serviceSelectionHint}>Review your details and submit.</Text>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>Service Type</Text>
           <Text style={styles.summaryValue}>{serviceType === 'full' ? 'Full Time Services' : 'Day Care'}</Text>
           <Text style={styles.summaryLabel}>Service</Text>
           <Text style={styles.summaryValue}>{selectedServiceLabel}</Text>
-          <Text style={styles.summaryLabel}>Reason</Text>
+          <Text style={styles.summaryLabel}>Comments</Text>
           <Text style={styles.summaryValue}>{diseaseName || '-'}</Text>
           <Text style={styles.summaryLabel}>Appointment Address</Text>
           <Text style={styles.summaryValue}>{appointmentAddress || '-'}</Text>
@@ -1057,47 +993,11 @@ export default function AppointmentsScreen({ user, onAppointmentCreated }) {
           <Text style={styles.summaryValue}>{appointmentDate ? formatDisplay(appointmentDate) : '-'}</Text>
           <Text style={styles.summaryLabel}>Time</Text>
           <Text style={styles.summaryValue}>{buildSlotTimeRange(startTime, endTime) || '-'}</Text>
-          <Text style={styles.summaryLabel}>Discharge Date</Text>
-          <Text style={styles.summaryValue}>{dischargeDate ? formatDisplay(dischargeDate) : '-'}</Text>
           <Text style={styles.summaryLabel}>No. of Days</Text>
           <Text style={styles.summaryValue}>{noOfDays || '-'}</Text>
         </View>
-        {appointmentDate && startTime && endTime ? (
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Available Staff</Text>
-            {availableStaffLoading ? (
-              <View style={styles.staffStatus}>
-                <ActivityIndicator color="#4f7cff" size="small" />
-                <Text style={styles.staffStatusText}>Checking available staff...</Text>
-              </View>
-            ) : availableStaff.length ? (
-              <View style={styles.staffOptions}>
-                {availableStaff.map((staff, index) => {
-                  const sid = String(getStaffId(staff) || index);
-                  const selected = String(staffId) === String(getStaffId(staff));
-                  return (
-                    <TouchableOpacity
-                      key={sid}
-                      style={[styles.staffOption, selected && styles.staffOptionActive]}
-                      onPress={() => setStaffId(String(getStaffId(staff) || '0'))}
-                      disabled={loading}
-                    >
-                      <MaterialIcons name={selected ? 'radio-button-checked' : 'radio-button-unchecked'} size={18} color={selected ? '#4f7cff' : '#8a91a7'} />
-                      <Text style={[styles.staffOptionText, selected && styles.staffOptionTextActive]}>{getStaffLabel(staff)}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            ) : (
-              <View style={styles.staffStatus}>
-                <MaterialIcons name="person-off" size={18} color="#c94a59" />
-                <Text style={[styles.staffStatusText, styles.staffStatusError]}>
-                  {availableStaffError || 'No staff available for this slot.'}
-                </Text>
-              </View>
-            )}
-          </View>
-        ) : null}
+        {/* Discharge Date — hidden from UI */}
+        {/* Staff selection — hidden from UI */}
       </>
     );
   };
@@ -1318,5 +1218,10 @@ const styles = StyleSheet.create({
   dayModeButtonDisabled: { opacity: 0.5 },
   dayModeActive: { backgroundColor: C.primary },
   dayModeText: { color: C.textSecondary, fontSize: 14, fontWeight: '700' },
-  dayModeTextActive: { color: '#ffffff' }
+  dayModeTextActive: { color: '#ffffff' },
+  summaryCard: { backgroundColor: C.bgMuted, borderRadius: 16, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: C.border },
+  summaryLabel: { color: C.textMuted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 10 },
+  summaryValue: { color: C.textPrimary, fontSize: 14, fontWeight: '700', marginTop: 2 },
+  dropdownItemTextActive: { color: C.primary, fontWeight: '700' },
+  emptyRow: { backgroundColor: C.bgMuted, borderRadius: 14, padding: 14 }
 });

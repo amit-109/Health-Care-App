@@ -5,7 +5,9 @@ const normalizePinCode = (value = '') => value.replace(/\D/g, '');
 
 const appendIfPresent = (params, key, value) => {
   if (value !== undefined && value !== null) {
-    params.append(key, String(value));
+    // Convert boolean to lowercase string for API
+    const stringValue = typeof value === 'boolean' ? String(value).toLowerCase() : String(value);
+    params.append(key, stringValue);
   }
 };
 
@@ -41,13 +43,19 @@ export async function updateUserProfile(id, data) {
   appendIfPresent(params, 'HouseNumber', data.houseNumber);
   appendIfPresent(params, 'PinCode', normalizePinCode(data.pinCode || data.pincode || ''));
   appendIfPresent(params, 'Gender', data.gender);
-  appendIfPresent(params, 'Email', data.email);
   if (data.isActive !== undefined) appendIfPresent(params, 'IsActive', data.isActive);
-  appendProfileImage(formData, data.userProfileImageUrl || data.profileImage);
+  
+  const hasImage = !!(data.userProfileImageUrl || data.profileImage);
+  if (hasImage) {
+    appendProfileImage(formData, data.userProfileImageUrl || data.profileImage);
+  }
 
-  return apiRequest(`/api/users/${id}?${params.toString()}`, {
+  const body = hasImage ? formData : undefined;
+
+  return apiRequest(`/users/${id}?${params.toString()}`, {
     method: 'PUT',
-    body: formData
+    ...(body && { body }),
+    ...(hasImage && { headers: { Accept: '*/*' } })
   });
 }
 
@@ -113,7 +121,7 @@ export async function verifySignupOtp({ phoneNumber, otp }) {
 }
 
 export async function fetchUserProfile(userId) {
-  return apiRequest(`/api/users/${userId}`, {
+  return apiRequest(`/users/${userId}`, {
     method: 'GET'
   });
 }

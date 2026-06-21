@@ -81,13 +81,14 @@ export async function apiRequest(path, options = {}) {
       headers
     });
   } catch (err) {
+    console.error('[API ERROR] Fetch failed:', err);
     if (isLocalhostApi) {
       throw new Error(
         'Unable to reach API at localhost. On a phone, use your computer IP address in EXPO_PUBLIC_API_BASE_URL.'
       );
     }
 
-    throw new Error('Unable to connect to the server. Please check your internet connection.');
+    throw new Error(`Unable to connect to the server. Please check your internet connection. (${err.message})`);
   }
 
   const { payload, rawText, contentType } = await parseResponseDetailed(response);

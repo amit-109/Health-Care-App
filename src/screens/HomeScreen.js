@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Image, RefreshControl, ScrollView,
+  ActivityIndicator, Image, ScrollView,
   StyleSheet, Text, TouchableOpacity, View, useWindowDimensions
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { extractPatientDashboard, getAppointmentStatusLabel, getPatientDashboard } from '../api/dashboard';
 import { C } from '../config/theme';
-import { normalizeImageUri } from '../config/env';
+import { normalizeImageUri, withImageCacheBuster } from '../config/env';
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -116,7 +116,7 @@ function ApptCard({ appt, label, accent }) {
 }
 
 /* ── Main ── */
-export default function HomeScreen({ user }) {
+export default function HomeScreen({ user, onBookAppointment }) {
   const { width } = useWindowDimensions();
   const compact = width < 380;
   const [dashboard, setDashboard] = useState(null);
@@ -154,6 +154,7 @@ export default function HomeScreen({ user }) {
   const approved    = Number(summary.totalApproved || 0);
   const cancelled   = Number(summary.totalCancelled || 0);
   const rate        = useMemo(() => (!total ? 0 : Math.round((completed / total) * 100)), [total, completed]);
+  const avatarUri = withImageCacheBuster(user?.profileImage || summary.profileImage, user?.profileImageVersion);
 
   if (loading && !dashboard) {
     return (
@@ -169,7 +170,6 @@ export default function HomeScreen({ user }) {
       style={st.page}
       contentContainerStyle={[st.content, compact && st.contentCompact]}
       showsVerticalScrollIndicator={false}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={C.primary} colors={[C.primary]} />}
     >
       {/* ── Hero ── */}
       <View style={[st.hero, compact && st.heroCompact]}>
@@ -178,20 +178,14 @@ export default function HomeScreen({ user }) {
             <Text style={st.greeting}>{getHourGreeting()}, {firstName} 👋</Text>
             <Text style={st.heroDate}>{formatDate(new Date().toISOString())}</Text>
           </View>
-          {normalizeImageUri(user?.profileImage || summary.profileImage)
+          {avatarUri
             ? <Image
-                source={{ uri: normalizeImageUri(user?.profileImage || summary.profileImage) }}
+                source={{ uri: avatarUri }}
                 style={st.avatar}
-                onError={({ nativeEvent }) => console.warn('HomeScreen avatar image failed', normalizeImageUri(user?.profileImage || summary.profileImage), nativeEvent)}
+                onError={({ nativeEvent }) => console.warn('HomeScreen avatar image failed', avatarUri, nativeEvent)}
               />
             : <View style={st.avatarFallback}><Text style={st.avatarText}>{getInitials(patientName)}</Text></View>
           }
-          {/* Dev-only: show resolved avatar URI for debugging */}
-          {__DEV__ && (
-            <Text style={{ color: C.textMuted, fontSize: 11, marginTop: 6 }} numberOfLines={2} ellipsizeMode="middle">
-              {`avatar: ${String(normalizeImageUri(user?.profileImage || summary.profileImage) || '')}`}
-            </Text>
-          )}
         </View>
 
         <View style={st.heroStrip}>
@@ -245,14 +239,29 @@ export default function HomeScreen({ user }) {
         </>
       )}
 
-      {/* ── Services ── */}
+      {/* ── Quick Book ── */}
+      <Section title="Book Appointment" sub="Choose your care type" />
+      <View style={st.bookRow}>
+        <TouchableOpacity style={[st.bookTypeBtn, st.bookTypeBtnFull]} onPress={() => onBookAppointment?.('full')}>
+          <MaterialIcons name="access-time" size={22} color="#fff" />
+          <Text style={st.bookTypeBtnText}>Full Time</Text>
+          <Text style={st.bookTypeBtnSub}>Multi-day care</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[st.bookTypeBtn, st.bookTypeBtnDay]} onPress={() => onBookAppointment?.('day')}>
+          <MaterialIcons name="wb-sunny" size={22} color="#fff" />
+          <Text style={st.bookTypeBtnText}>Day Care</Text>
+          <Text style={st.bookTypeBtnSub}>Single-day visit</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Services ── */}}
       <Section title="Our Services" sub={`${services.length} available`} />
       {services.length ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.hList}>
           {services.map((s, i) => {
             const serviceImage = normalizeImageUri(s.image || s.serviceImage || s.imageUrl || s.iconUrl);
             return (
-              <View key={s.id || i} style={st.serviceCard}>
+              <TouchableOpacity key={s.id || i} style={st.serviceCard} onPress={() => onBookAppointment?.('day')}>
                 {serviceImage
                   ? <Image
                       source={{ uri: serviceImage }}
@@ -263,7 +272,7 @@ export default function HomeScreen({ user }) {
                 }
                 <Text style={st.serviceName} numberOfLines={2}>{getServiceName(s)}</Text>
                 <Text style={st.serviceCat} numberOfLines={1}>{s.category || s.categoryName || 'Care'}</Text>
-              </View>
+              </TouchableOpacity>
             );
           })}
         </ScrollView>
@@ -322,9 +331,9 @@ const st = StyleSheet.create({
   greeting:    { color: '#fff', fontSize: 20, fontWeight: '800' },
   heroDate:    { color: '#bae6fd', fontSize: 12, fontWeight: '600', marginTop: 3 },
 
-  avatar:         { width: 50, height: 50, borderRadius: 16, backgroundColor: C.primaryLight },
-  avatarFallback: { width: 50, height: 50, borderRadius: 16, backgroundColor: '#ffffff22', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#ffffff55' },
-  avatarText:     { color: '#fff', fontSize: 18, fontWeight: '900' },
+  avatar:         { width: 50, height: 50, borderRadius: 20, backgroundColor: '#fff', overflow: 'hidden' },
+  avatarFallback: { width: 50, height: 50, borderRadius: 20, backgroundColor: C.primaryLight, alignItems: 'center', justifyContent: 'center' },
+  avatarText:     { color: C.primary, fontSize: 18, fontWeight: '900' },
 
   heroStrip:  { backgroundColor: '#ffffff18', borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
   heroKicker: { color: '#bae6fd', fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginBottom: 4 },
@@ -384,6 +393,13 @@ const st = StyleSheet.create({
   staffSpec:       { color: C.textMuted, fontSize: 11, fontWeight: '600', marginTop: 3, textAlign: 'center' },
   staffBadge:      { marginTop: 8, backgroundColor: C.primaryLight, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
   staffBadgeText:  { color: C.primary, fontSize: 11, fontWeight: '700' },
+
+  bookRow:         { flexDirection: 'row', gap: 12, marginBottom: 4 },
+  bookTypeBtn:     { flex: 1, borderRadius: 20, padding: 16, alignItems: 'center', justifyContent: 'center', gap: 4, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, elevation: 4 },
+  bookTypeBtnFull: { backgroundColor: C.primary },
+  bookTypeBtnDay:  { backgroundColor: '#0891b2' },
+  bookTypeBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  bookTypeBtnSub:  { color: '#ffffff99', fontSize: 11, fontWeight: '600' },
 
   emptyRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.bgCard, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border },
   emptyText: { color: C.textMuted, fontSize: 13, fontWeight: '600' },

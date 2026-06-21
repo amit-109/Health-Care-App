@@ -7,6 +7,7 @@ import { useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { AntDesign, MaterialIcons } from '@expo/vector-icons';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import LoginScreen from './src/screens/LoginScreen';
 import SignupScreen from './src/screens/SignupScreen';
@@ -47,8 +48,10 @@ const createUserProfile = (user = {}, fallback = {}) => ({
   houseNumber: user.houseNumber || fallback.houseNumber || '',
   pinCode: user.pinCode || user.pincode || user.PinCode || fallback.pinCode || fallback.pincode || '',
   profileImage: normalizeImageUri(user.profileImage || user.userProfileImageUrl || user.userProfileImage || fallback.profileImage || '') || '',
+  profileImageVersion: user.profileImageVersion || fallback.profileImageVersion || '',
   role: user.role || fallback.role || 'patient',
   token: user.token || fallback.token || '',
+  isActive: user.isActive !== undefined ? user.isActive : user.IsActive !== undefined ? user.IsActive : true,
   lastVisit: user.lastVisit || fallback.lastVisit || '2026-04-05',
   nextAppointment: user.nextAppointment || fallback.nextAppointment || '2026-04-26',
   message:
@@ -65,7 +68,9 @@ function AppContent() {
   const [user, setUser] = useState(null);
   const [pendingAuth, setPendingAuth] = useState(null);
   const [toast, setToast] = useState(null);
-  const [theme] = useState({ primary: '#0891b2', background: '#f0f9ff' });
+  const [theme] = useState({ primary: '#0d9488', background: '#0f766e' });
+  const [apptInitServiceType, setApptInitServiceType] = useState(null);
+  const tabNavRef = useRef(null);
 
   const showToast = (message, type = 'info') => {
     if (toastTimerRef.current) {
@@ -193,73 +198,49 @@ function AppContent() {
 
     try {
       if (pendingAuth.type === 'signup') {
-        const payload = await verifySignupOtp({
+        await verifySignupOtp({
           phoneNumber: pendingAuth.phoneNumber,
           otp: inputOtp
         });
-        const apiUser = extractUser(payload) || {};
-        const token = extractAuthToken(payload);
-        const userId = apiUser.id || apiUser.userId || apiUser.UserId;
-        setAuthToken(token);
 
-        /* Fetch full profile to ensure all fields are canonical */
-        let profileData = apiUser;
-        if (userId) {
-          try {
-            const profilePayload = await fetchUserProfile(userId);
-            const fetchedUser = extractUser(profilePayload) || {};
-            profileData = { ...apiUser, ...fetchedUser };
-          } catch (e) {
-            /* fallback to signup response if fetch fails */
-          }
-        }
-
-        const resolvedUser = createUserProfile(
-          {
-            ...profileData,
-            token
-          },
-          pendingAuth.user
-        );
-
-        setUser(resolvedUser);
-        showToast('Account created successfully.', 'success');
-      } else {
-        const payload = await verifyLoginOtp({
-          phoneNumber: pendingAuth.phoneNumber,
-          otp: inputOtp
-        });
-        const apiUser = extractUser(payload) || {};
-        const token = extractAuthToken(payload);
-        const userId = apiUser.id || apiUser.userId || apiUser.UserId;
-        setAuthToken(token);
-
-        /* Fetch full profile to ensure all fields are canonical */
-        let profileData = apiUser;
-        if (userId) {
-          try {
-            const profilePayload = await fetchUserProfile(userId);
-            const fetchedUser = extractUser(profilePayload) || {};
-            profileData = { ...apiUser, ...fetchedUser };
-          } catch (e) {
-            /* fallback to login response if fetch fails */
-          }
-        }
-
-        const resolvedUser = createUserProfile(
-          {
-            ...profileData,
-            token
-          },
-          {
-            phone: pendingAuth.phoneNumber
-          }
-        );
-
-        setUser(resolvedUser);
-        showToast('OTP verified successfully.', 'success');
+        setPendingAuth(null);
+        showToast('Account created successfully. Please login to continue.', 'success');
+        return { ok: true, redirect: 'login' };
       }
 
+      const payload = await verifyLoginOtp({
+        phoneNumber: pendingAuth.phoneNumber,
+        otp: inputOtp
+      });
+      const apiUser = extractUser(payload) || {};
+      const token = extractAuthToken(payload);
+      const userId = apiUser.id || apiUser.userId || apiUser.UserId;
+      setAuthToken(token);
+
+      /* Fetch full profile to ensure all fields are canonical */
+      let profileData = apiUser;
+      if (userId) {
+        try {
+          const profilePayload = await fetchUserProfile(userId);
+          const fetchedUser = extractUser(profilePayload) || {};
+          profileData = { ...apiUser, ...fetchedUser };
+        } catch (e) {
+          /* fallback to login response if fetch fails */
+        }
+      }
+
+      const resolvedUser = createUserProfile(
+        {
+          ...profileData,
+          token
+        },
+        {
+          phone: pendingAuth.phoneNumber
+        }
+      );
+
+      setUser(resolvedUser);
+      showToast('OTP verified successfully.', 'success');
       setPendingAuth(null);
       return { ok: true };
     } catch (error) {
@@ -295,6 +276,11 @@ function AppContent() {
     showToast('Appointment booked successfully.', 'success');
   };
 
+  const handleBookFromHome = (serviceType) => {
+    setApptInitServiceType(serviceType || 'day');
+    setTimeout(() => tabNavRef.current?.navigate('Appointments'), 0);
+  };
+
   const handleProfileUpdated = (updatedFields) => {
     setUser((prev) => ({ ...prev, ...updatedFields }));
     showToast('Profile updated successfully.', 'success');
@@ -310,10 +296,16 @@ function AppContent() {
   const toastTop = insets.top + (user ? 12 : 18);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right']}>
-      <NavigationContainer>
-        {!user ? (
-          <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <LinearGradient
+      colors={['#0f766e', '#0d9488']}
+      start={[0, 0]}
+      end={[1, 1]}
+      style={styles.gradient}
+    >
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        <NavigationContainer>
+          {!user ? (
+            <Stack.Navigator screenOptions={{ headerShown: false }}>
             <Stack.Screen name="Login">
               {(props) => <LoginScreen {...props} onPasswordLogin={handlePasswordLogin} onOtpLogin={handleSendOtpLogin} />}
             </Stack.Screen>
@@ -334,17 +326,17 @@ function AppContent() {
             </Stack.Screen>
           </Stack.Navigator>
         ) : (
-          <Tab.Navigator screenOptions={screenOptions}>
-            <Tab.Screen
+            <Tab.Navigator screenOptions={screenOptions} ref={tabNavRef}>
+              <Tab.Screen
               name="Home"
-              children={() => <HomeScreen user={user} />}
+              children={() => <HomeScreen user={user} onBookAppointment={handleBookFromHome} />}
               options={{
                 tabBarIcon: ({ color }) => <AntDesign name="home" size={20} color={color} />
               }}
             />
             <Tab.Screen
               name="Appointments"
-              children={() => <AppointmentsScreen user={user} onAppointmentCreated={handleAppointmentCreated} />}
+              children={() => <AppointmentsScreen user={user} onAppointmentCreated={handleAppointmentCreated} initialServiceType={apptInitServiceType} initialTab={apptInitServiceType ? 'form' : 'list'} />}
               options={{
                 tabBarIcon: ({ color }) => <MaterialIcons name="event-note" size={20} color={color} />
               }}
@@ -356,25 +348,26 @@ function AppContent() {
                 tabBarIcon: ({ color }) => <AntDesign name="user" size={20} color={color} />
               }}
             />
-          </Tab.Navigator>
-        )}
-      </NavigationContainer>
+            </Tab.Navigator>
+          )}
+        </NavigationContainer>
 
-      {toast ? (
-        <View
-          pointerEvents="none"
-          style={[
-            styles.toast,
-            styles[`toast${toast.type.charAt(0).toUpperCase()}${toast.type.slice(1)}`],
-            { top: toastTop }
-          ]}
-        >
-          <Text style={styles.toastText}>{toast.message}</Text>
-        </View>
-      ) : null}
+          {toast ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.toast,
+              styles[`toast${toast.type.charAt(0).toUpperCase()}${toast.type.slice(1)}`],
+              { top: toastTop }
+            ]}
+          >
+            <Text style={styles.toastText}>{toast.message}</Text>
+          </View>
+        ) : null}
 
-      <StatusBar style="dark" />
-    </SafeAreaView>
+        <StatusBar style="dark" />
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
@@ -391,6 +384,13 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1
+  },
+  gradient: {
+    flex: 1
+  },
+  safeArea: {
+    flex: 1,
+    backgroundColor: 'transparent'
   },
   tabBar: {
     borderTopWidth: 1,
@@ -425,7 +425,7 @@ const styles = StyleSheet.create({
     elevation: 6
   },
   toastSuccess: {
-    backgroundColor: '#059669'
+    backgroundColor: '#0d9488'
   },
   toastError: {
     backgroundColor: '#dc2626'

@@ -1,10 +1,10 @@
 // Healthcare industry standard color palette
 export const C = {
   // Primary — medical teal
-  primary:       '#0891b2',
-  primaryDark:   '#0e7490',
-  primaryLight:  '#e0f2fe',
-  primaryMid:    '#bae6fd',
+  primary:       '#0d9488',
+  primaryDark:   '#0f766e',
+  primaryLight:  '#ccfbf1',
+  primaryMid:    '#99f6e4',
 
   // Accent — health green
   accent:        '#10b981',

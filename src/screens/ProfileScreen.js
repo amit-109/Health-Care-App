@@ -3,11 +3,11 @@ import {
   Text, TextInput, TouchableOpacity, View, useWindowDimensions
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { C } from '../config/theme';
-import { updateUserProfile } from '../api/auth';
-import { normalizeImageUri } from '../config/env';
+import { updateUserProfile, extractUser } from '../api/auth';
+import { normalizeImageUri, withImageCacheBuster } from '../config/env';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -74,11 +74,25 @@ export default function ProfileScreen({ user, onLogout, onProfileUpdated }) {
   const [pinCode, setPinCode]       = useState(user.pinCode || user.pincode || '');
   const [gender, setGender]         = useState(user.gender || '');
   const [profileImage, setProfileImage] = useState(null); // new image picked
+  const viewedProfileImage = withImageCacheBuster(user.profileImage, user.profileImageVersion);
+  const editProfileImage = withImageCacheBuster(user.profileImage, user.profileImageVersion);
 
   const address_display = useMemo(
     () => [user.houseNumber, user.address, user.landmark, user.city].filter(Boolean).join(', '),
     [user.address, user.city, user.houseNumber, user.landmark]
   );
+
+  useEffect(() => {
+    if (mode !== 'view') return;
+    setName(user.name || '');
+    setEmail(user.email || '');
+    setPhone(user.phone || '');
+    setAddress(user.address || '');
+    setHouseNumber(user.houseNumber || '');
+    setLandmark(user.landmark || '');
+    setPinCode(user.pinCode || user.pincode || '');
+    setGender(user.gender || '');
+  }, [mode, user.address, user.email, user.gender, user.houseNumber, user.landmark, user.name, user.phone, user.pinCode, user.pincode]);
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -107,7 +121,7 @@ export default function ProfileScreen({ user, onLogout, onProfileUpdated }) {
     if (!name.trim()) { setSaveError('Name is required.'); return; }
     setSaving(true);
     try {
-      await updateUserProfile(user.id, {
+      const profileData = {
         name: name.trim(),
         email: email.trim(),
         phone: phone.trim(),
@@ -116,13 +130,40 @@ export default function ProfileScreen({ user, onLogout, onProfileUpdated }) {
         landmark: landmark.trim(),
         pinCode: pinCode.trim(),
         gender,
-        userProfileImageUrl: profileImage
-      });
+        userProfileImageUrl: profileImage,
+        isActive: true
+      };
+      
+      console.log('Updating profile with data:', profileData);
+      const response = await updateUserProfile(user.id, profileData);
+      
+      // Extract updated user data from API response
+      const updatedUserFromApi = extractUser(response) || {};
+      const nextProfileImage =
+        profileImage?.uri ||
+        normalizeImageUri(updatedUserFromApi.profileImage || updatedUserFromApi.userProfileImageUrl || updatedUserFromApi.userProfileImage) ||
+        user.profileImage;
+      const nextProfileImageVersion = profileImage ? Date.now() : user.profileImageVersion;
+      
       if (onProfileUpdated) {
-        onProfileUpdated({ name: name.trim(), email: email.trim(), phone: phone.trim(), address: address.trim(), houseNumber: houseNumber.trim(), landmark: landmark.trim(), gender, pinCode: pinCode.trim(), profileImage: profileImage ? profileImage.uri : user.profileImage });
+        onProfileUpdated({ 
+          name: updatedUserFromApi.fullName || updatedUserFromApi.name || name.trim(), 
+          email: updatedUserFromApi.email || email.trim(), 
+          phone: updatedUserFromApi.phone || updatedUserFromApi.phoneNumber || phone.trim(), 
+          address: updatedUserFromApi.address || address.trim(), 
+          houseNumber: updatedUserFromApi.houseNumber || houseNumber.trim(), 
+          landmark: updatedUserFromApi.landmark || landmark.trim(), 
+          gender: updatedUserFromApi.gender || gender, 
+          pinCode: updatedUserFromApi.pinCode || updatedUserFromApi.pincode || pinCode.trim(), 
+          profileImage: nextProfileImage,
+          profileImageVersion: nextProfileImageVersion,
+          isActive: updatedUserFromApi.isActive !== undefined ? updatedUserFromApi.isActive : true
+        });
       }
+      setProfileImage(null);
       setMode('view');
     } catch (e) {
+      console.error('Profile update error:', e);
       setSaveError(e.message || 'Unable to update profile.');
     } finally {
       setSaving(false);
@@ -154,8 +195,8 @@ export default function ProfileScreen({ user, onLogout, onProfileUpdated }) {
         <View style={s.banner}>
           <View style={s.bannerTop}>
             <View style={s.avatarWrap}>
-              {normalizeImageUri(user.profileImage)
-                ? <Image source={{ uri: normalizeImageUri(user.profileImage) }} style={s.avatarImg} />
+              {viewedProfileImage
+                ? <Image source={{ uri: viewedProfileImage }} style={s.avatarImg} />
                 : <Text style={s.avatarText}>{getInitials(user.name)}</Text>
               }
             </View>
@@ -173,22 +214,6 @@ export default function ProfileScreen({ user, onLogout, onProfileUpdated }) {
             </TouchableOpacity>
           </View>
 
-          <View style={s.vitalsRow}>
-            {[
-              { label: 'Age',    value: display(user.age, '--') },
-              { label: 'Gender', value: display(user.gender, '--') },
-              { label: 'Blood',  value: display(user.bloodGroup, '--') },
-              { label: 'City',   value: display(user.city, '--') },
-            ].map((v, i, arr) => (
-              <View key={v.label} style={{ flexDirection: 'row', flex: 1 }}>
-                <View style={s.vitalItem}>
-                  <Text style={s.vitalValue}>{v.value}</Text>
-                  <Text style={s.vitalLabel}>{v.label}</Text>
-                </View>
-                {i < arr.length - 1 && <View style={s.vitalDivider} />}
-              </View>
-            ))}
-          </View>
         </View>
 
         {/* Contact */}
@@ -202,25 +227,6 @@ export default function ProfileScreen({ user, onLogout, onProfileUpdated }) {
           <DetailRow icon="location-on" label="Full Address"  value={address_display} />
           <DetailRow icon="pin-drop"    label="Pin Code"      value={user.pinCode || user.pincode} />
         </View>
-
-        {/* Account */}
-        <View style={s.card}>
-          <View style={s.cardHeader}>
-            <View style={s.cardHeaderIcon}><MaterialIcons name="manage-accounts" size={18} color={C.primary} /></View>
-            <Text style={s.cardTitle}>Account Details</Text>
-          </View>
-          <DetailRow icon="badge"           label="Role"             value={user.role} />
-          <DetailRow icon="event-note"      label="Last Visit"       value={user.lastVisit} />
-          <DetailRow icon="event-available" label="Next Appointment" value={user.nextAppointment} />
-        </View>
-
-        {/* Health message */}
-        {user.message ? (
-          <View style={s.messageCard}>
-            <MaterialIcons name="health-and-safety" size={20} color={C.accent} />
-            <Text style={s.messageText}>{user.message}</Text>
-          </View>
-        ) : null}
 
         {/* Logout */}
         <TouchableOpacity disabled={loggingOut} style={[s.logoutBtn, loggingOut && s.btnDisabled]} onPress={handleLogout}>
@@ -259,11 +265,11 @@ export default function ProfileScreen({ user, onLogout, onProfileUpdated }) {
                 style={s.avatarPickerImg}
                 onError={({ nativeEvent }) => console.warn('ProfileScreen picked image failed', profileImage.uri, nativeEvent)}
               />
-            : normalizeImageUri(user.profileImage)
+            : editProfileImage
               ? <Image
-                  source={{ uri: normalizeImageUri(user.profileImage) }}
+                  source={{ uri: editProfileImage }}
                   style={s.avatarPickerImg}
-                  onError={({ nativeEvent }) => console.warn('ProfileScreen stored profile image failed', normalizeImageUri(user.profileImage), nativeEvent)}
+                  onError={({ nativeEvent }) => console.warn('ProfileScreen stored profile image failed', editProfileImage, nativeEvent)}
                 />
               : <View style={s.avatarPickerFallback}>
                   <Text style={s.avatarPickerInitials}>{getInitials(name || user.name)}</Text>
@@ -361,12 +367,6 @@ const s = StyleSheet.create({
   editBtn:     { backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 4 },
   editBtnText: { color: C.primary, fontSize: 12, fontWeight: '800' },
 
-  vitalsRow:    { flexDirection: 'row', backgroundColor: '#ffffff18', borderRadius: 16, padding: 14 },
-  vitalItem:    { flex: 1, alignItems: 'center' },
-  vitalDivider: { width: 1, backgroundColor: '#ffffff30', marginVertical: 2 },
-  vitalValue:   { color: '#fff', fontSize: 14, fontWeight: '900' },
-  vitalLabel:   { color: '#bae6fd', fontSize: 11, fontWeight: '600', marginTop: 4 },
-
   /* ── view: cards ── */
   card:           { backgroundColor: C.bgCard, borderRadius: 20, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: C.border, shadowColor: C.shadow, shadowOpacity: 0.04, shadowRadius: 10, elevation: 2 },
   cardHeader:     { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.borderLight },
@@ -377,9 +377,6 @@ const s = StyleSheet.create({
   detailCopy:     { flex: 1, marginLeft: 12 },
   detailLabel:    { color: C.textMuted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   detailValue:    { color: C.textPrimary, fontSize: 14, fontWeight: '700', marginTop: 3, lineHeight: 20 },
-
-  messageCard: { backgroundColor: C.accentLight, borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12, borderWidth: 1, borderColor: '#a7f3d0' },
-  messageText: { flex: 1, color: '#065f46', fontSize: 13, fontWeight: '600', lineHeight: 20 },
 
   logoutBtn:   { backgroundColor: C.dangerLight, borderRadius: 16, paddingVertical: 14, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#fecaca', marginBottom: 16 },
   logoutText:  { color: C.danger, fontSize: 15, fontWeight: '800' },

@@ -29,10 +29,20 @@ export function normalizeImageUri(uri) {
   if (/^https?:\/\//i.test(value)) {
     return value;
   }
+  if (/^(file|content|data|blob):/i.test(value)) {
+    return value;
+  }
   if (value.startsWith('/')) {
     return `${API_BASE_URL}${value}`;
   }
   return `${API_BASE_URL}/${value}`;
+}
+
+export function withImageCacheBuster(uri, version) {
+  const normalized = normalizeImageUri(uri);
+  if (!normalized || !version || normalized.startsWith('file:')) return normalized;
+  const separator = normalized.includes('?') ? '&' : '?';
+  return `${normalized}${separator}v=${encodeURIComponent(String(version))}`;
 }
 
 console.log('[API CONFIG] EXPO_PUBLIC_API_BASE_URL from extra:', env.EXPO_PUBLIC_API_BASE_URL);

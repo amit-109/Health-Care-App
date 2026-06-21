@@ -12,6 +12,7 @@ import {
   useWindowDimensions
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function OtpVerificationScreen({ navigation, authType, contact, onVerifyOtp, onResendOtp }) {
   const { width } = useWindowDimensions();
@@ -35,6 +36,11 @@ export default function OtpVerificationScreen({ navigation, authType, contact, o
 
     if (!result.ok) {
       setError(result.error);
+      return;
+    }
+
+    if (result.redirect === 'login') {
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
     }
   };
 
@@ -49,9 +55,10 @@ export default function OtpVerificationScreen({ navigation, authType, contact, o
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
-      <ScrollView contentContainerStyle={[styles.scrollContent, compact && styles.scrollContentCompact]} keyboardShouldPersistTaps="handled">
-        <View style={[styles.card, compact && styles.cardCompact]}>
+    <LinearGradient colors={['#0f766e', '#0d9488']} start={[0, 0]} end={[1, 1]} style={styles.gradient}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
+        <ScrollView contentContainerStyle={[styles.scrollContent, compact && styles.scrollContentCompact]} keyboardShouldPersistTaps="handled">
+          <View style={[styles.card, compact && styles.cardCompact]}>
           <Text style={[styles.title, compact && styles.titleCompact]}>{authType === 'signup' ? 'Verify registration' : 'Verify login'}</Text>
           <Text style={styles.subtitle}>
             {authType === 'signup'
@@ -96,14 +103,18 @@ export default function OtpVerificationScreen({ navigation, authType, contact, o
           </View>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
+  gradient: {
+    flex: 1
+  },
   container: {
     flex: 1,
-    backgroundColor: '#1c35ff'
+    backgroundColor: 'transparent'
   },
   scrollContent: {
     flexGrow: 1,
